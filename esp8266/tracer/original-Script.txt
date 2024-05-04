@@ -1,0 +1,46 @@
+>D
+;
+>B
+smlj=0
+;->sensor53 r
+>R
+smlj=0
+;
+>S
+if upsecs>30
+then
+smlj=1
+endif
+;
+if upsecs%300==0 
+then
+=> status 8
+endif
+>M 1
+;
++1,3,m,16,115200,TRACER,1,10,r010431100001,r0104311A0001,r0104331A0001,r0104331B0001,r010431000001,r010431010001,r010431020001,r0104310C0001,r0104310D0001,r0104310E0001,r010433040001,r0104330A0001,r0104330C0001,r010433120001,r010433030001
+;
+1,=h Battery
+1,010402SSssxxxx@i1:100,Temperature,°C,batteryTemperature,2
+1,010402SSssxxxx@i2:1,State of Charge,%,batterySoc,0
+1,010402SSssxxxx@i3:100,Voltage,V,batteryVoltage,2
+1,010402SSssxxxx@i4:100,Current,A,batteryCurrent,2
+1,=h _
+1,=h PV-Module
+1,010402SSssxxxx@i5:100,Voltage,V,pvVoltage,2
+1,010402SSssxxxx@i6:100,Current,A,pvCurrent,2
+1,010402SSssxxxx@i7:100,Power,W,pvPower,2
+1,=h _
+1,=h Load
+1,010402SSssxxxx@i8:100,Voltage,V,loadVoltage,2
+1,010402SSssxxxx@i9:100,Current,A,loadCurrent,2
+1,010402SSssxxxx@i10:100,Power,W,loadPower,2
+1,=h _
+1,=h Energy
+1,010402SSssxxxx@i11:100,Consumption daily,KWh,consumptionDay,2
+1,010402SSssxxxx@i12:100,Consumption total,KWh,consumptionSum,2
+1,010402SSssxxxx@i13:100,Production daily,KWh,productionDay,2
+1,010402SSssxxxx@i14:100,Production total,KWh,productionSum,2
+1,010402SSssxxxx@i15:100,Max. battery Voltage,V,batteryMaxVoltage,2
+;
+#

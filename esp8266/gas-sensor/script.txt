@@ -1,0 +1,132 @@
+>D 64
+; async streaming example
+m:array=0 4
+im="cubicInterpolationMode: 'monotone',"
+;im=""
+; total display seconds
+ts=60000
+
+>B
+->websensor12 0
+
+>T
+; you may offset and scale channels here as needed
+array[1]=ADS1115#A0*(6144/32768)
+array[2]=ADS1115#A1*(6144/32768)
+array[3]=ADS1115#A2*(6144/32768)
+array[4]=ADS1115#A3*(6144/32768)
+
+>W
+
+<span style='color:red'>MQ-7{m}<span style='color:red'>%array[1]% mV
+<span style='color:green'>MQ-9{m}<span style='color:green'>%array[2]% mV
+<span style='color:cyan'>MQ-6{m}<span style='color:cyan'>%array[3]% mV
+<span style='color:yellow'>Current{m}<span style='color:yellow'>%array[4]% mV
+
+$<div><canvas id='myChart' style='width:640px;height:300px;'> </canvas></div>
+
+so(8)
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.3.2"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@1.27.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.0.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-streaming@2.0.0"></script>
+
+<script>
+Chart.register(ChartStreaming);
+
+const bgcolor={
+id: 'custom_canvas_background_color',
+beforeDraw:(chart) => {
+const ctx = chart.canvas.getContext('2d');
+ctx.save();
+ctx.globalCompositeOperation = 'destination-over';
+ctx.fillStyle = 'lightgrey';
+ctx.fillRect(0, 0, chart.width, chart.height);
+ctx.restore();
+ }
+};
+
+const config={
+type:'line',
+plugins:[bgcolor],
+data: {
+datasets: [
+{
+label:'MQ-7',
+backgroundColor:'Red',
+borderColor:'Red',
+%im%
+fill:false,
+data:[]
+},
+{
+label:'MQ-9',
+backgroundColor:'Green',
+borderColor:'Green',
+%im%
+fill:false,
+data:[]
+},
+{
+label:'MQ-6',
+backgroundColor:'Cyan',
+borderColor:'Cyan',
+%im%
+fill:false,
+data:[]
+},
+{
+label:'Current',
+backgroundColor:'Yellow',
+borderColor:'Yellow',
+%im%
+fill:false,
+data:[]
+}
+]
+},
+options:{
+scales:{
+x:{
+type:'realtime',
+realtime:{
+delay:2000,
+duration:%0ts%,
+frameRate:30,
+refresh:1000, 
+pause:false,
+onRefresh: chart => {
+fetch('/cm?cmnd=script?array')
+.then(response => response.json())
+.then(data => {
+const pl=data['script'];
+const res=pl['array'];
+var index=0;
+chart.data.datasets.forEach(dataset => {
+dataset.data.push({
+x:Date.now(),
+y:res[index++]
+});
+});
+chart.update('quiet');
+});
+}
+}
+}
+}
+}
+};
+
+config.options.plugins={
+annotation:false,
+datalabels:false,
+zoom:false
+};
+
+const myChart=new Chart(
+document.getElementById('myChart'), 
+config
+);
+</script>
+

@@ -1,0 +1,17 @@
+{
+    "page": 1,
+    "id": 10,
+    "x": 10,
+    "y": 10,
+    "w": 240,
+    "obj": "label",
+    "text": "%ip%"
+}
+{"page":1,"id":20,"obj":"arc","x":10,"y":50,"w":150,"h":150}
+{"page":1,"id":11,"obj":"label","x":10,"y":200,"w":120,"h":40, "text":"Water"}
+{"page":1,"id":21,"obj":"arc","x":160,"y":50,"w":150,"h":150}
+{"page":1,"id":12,"obj":"label","x":160,"y":200,"w":120,"h":40, "text":"Box"}
+{"page":1,"id":30,"obj":"switch","x":10,"y":240,"w":70,"h":30,"radius":5}
+{"page":1,"id":31,"obj":"switch","x":85,"y":240,"w":70,"h":30,"radius":5}
+{"page":1,"id":32,"obj":"switch","x":165,"y":240,"w":70,"h":30,"radius":5}
+{"page":1,"id":33,"obj":"switch","x":240,"y":240,"w":70,"h":30,"radius":5}
