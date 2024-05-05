@@ -9,6 +9,8 @@ import mip
 mip.install('github:micropython/micropython-esp32-ulp')
 ```
 
+
+*Not necessary anymore since https://github.com/micropython/micropython-esp32-ulp/pull/98*
 Add the modified `src_to_binary` (`src_to_binary_ext`) to  the "__init__.py" to hand out the symbol addresses as well:
 ```python
 def src_to_binary_ext(src, cpu):
@@ -36,7 +38,6 @@ micropython -m esp32_ulp.parse_to_db soc/esp32/include/soc/*.h
 
 Help on how to load into defines database: https://github.com/micropython/micropython-esp32-ulp/blob/master/docs/preprocess.rst
 
-
 ### Build binary
 
 `from esp32_ulp import src_to_binary, preprocess`
@@ -61,3 +62,5 @@ This script allows you to write your assembler and berry scripts separately, mak
 A comprehensive example is given in `examples/ulp_pulse`. It contains the `.s` assembler script that registers pulses, pulse-lengths, min- & max-times and stores them in available registers.
 The corresponding berry script initialises the ULP code with the available settings, reads the required variables and provides them as `teleperiod` and a web-values.
 A convenenince helper is the use of templating curly braces which get replaced in the `assemble.py` script with the corresponding register addresses once the code has been compiled. As an example: in the `ulp_pulse.s` the global `edge_count` is defined as `long` which is then only available as a register address after compilation. In the `init()` of `ulp_pulse.be` the section with the curly braces in `self.reg_edge_count = {{edge_count}}` is replaced with the corresponding register address.
+
+### Docker container

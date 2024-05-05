@@ -7,6 +7,6 @@ for f in *; do
         # Will not run if no directories are available
         echo "Packing $f"
         # Create a zip pack file (no compression) with the name of the directory with the ".autoconf" extension
-        zip -0 -j dist/$f.autoconf $f/*
+        zip -0 -j dist/$f.autoconf $f/* -x '*docs*'
     fi
 done
