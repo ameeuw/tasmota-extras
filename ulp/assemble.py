@@ -6,9 +6,10 @@ if (len(sys.argv) == 1):
     sys.exit()
 
 project_name = sys.argv[1]
+
 print('Assembling project "' + project_name + '":\n')
-ulpSourcePath = "examples/" + project_name + "/" + project_name + ".s"
-berrySourcePath = "examples/" + project_name + "/" + project_name + ".be"
+ulpSourcePath = project_name + "/" + project_name + ".s"
+berrySourcePath = project_name + "/" + project_name + ".be"
 
 # Load ULP source code
 print('1. Loading ULP source code from "' + ulpSourcePath + '"')

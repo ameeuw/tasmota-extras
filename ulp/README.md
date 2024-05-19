@@ -64,3 +64,25 @@ The corresponding berry script initialises the ULP code with the available setti
 A convenenince helper is the use of templating curly braces which get replaced in the `assemble.py` script with the corresponding register addresses once the code has been compiled. As an example: in the `ulp_pulse.s` the global `edge_count` is defined as `long` which is then only available as a register address after compilation. In the `init()` of `ulp_pulse.be` the section with the curly braces in `self.reg_edge_count = {{edge_count}}` is replaced with the corresponding register address.
 
 ### Docker container
+
+There is Dockerfile that build a docker image as part of this repository which includes all the above steps (install micropython, install ulp package, build the defines database).
+This image can be used to run the assemble script without any hassle.
+
+To build the included `ulp_pulse` example a "run_assemble.sh" script is included:
+```sh
+#!/bin/sh
+
+# First mount: mount the assemble script
+# Second mount: mount the project directory for input
+# Third mount: mount the dist directory for output
+
+docker run -it --rm \
+-v "$PWD/assemble.py":/assemble.py \
+-v "$PWD/examples/ulp_pulse":/ulp_pulse \
+-v "$PWD/dist":/dist \
+ameeuw/ulp \
+micropython assemble.py ulp_pulse
+```
+
+From the `ulp` directory we run the docker image `ameeuw/ulp` and mount the `assemble.py` script on the root level, we mount the project directory for ulp_pulse (from `examples/ulp_pulse`) as `ulp_pulse` (project_name) on the root level, and finally mount the `dist` directory on the root level.
+We then run the mounted `assemble.py` script using the `micropython` in the docker image and provide the project_name `ulp_pulse` to build the final output file.
