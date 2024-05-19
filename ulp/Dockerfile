@@ -1,6 +1,8 @@
 FROM micropython/unix
 RUN apt-get update && apt-get install -y git
 
+WORKDIR /
+
 RUN echo "\
 import mip\n\
 mip.install('github:micropython/micropython-esp32-ulp')\n\
