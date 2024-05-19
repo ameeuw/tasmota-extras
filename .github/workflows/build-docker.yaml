@@ -33,14 +33,14 @@ jobs:
       # Set explicit image tag on actual release
       - name: Set release image name
         if: ${{ github.event_name == 'release' }}
-        run: echo "image_name=exnaton/${{ env.GITHUB_REPOSITORY_NAME_PART }}:${{ github.event.release.name }}" >> $GITHUB_ENV
+        run: echo "image_name=ameeuw/${{ env.GITHUB_REPOSITORY_NAME_PART }}:${{ github.event.release.name }}" >> $GITHUB_ENV
 
       - name: Set "latest" tag for each branch
         if: ${{ github.event_name != 'release' }}
-        run: echo "image_name_latest=exnaton/${{ env.GITHUB_REPOSITORY_NAME_PART }}:${{ env.GITHUB_REF_SLUG }}-latest" >> $GITHUB_ENV
+        run: echo "image_name_latest=ameeuw/${{ env.GITHUB_REPOSITORY_NAME_PART }}:${{ env.GITHUB_REF_SLUG }}-latest" >> $GITHUB_ENV
 
       - name: Set immutable image tag
-        run: echo "image_immutable_tag=exnaton/${{ env.GITHUB_REPOSITORY_NAME_PART }}:${{ env.GITHUB_REF_SLUG }}-$(date +%F.%H%M%S)-${{ env.GITHUB_SHA_SHORT }}" >> $GITHUB_ENV
+        run: echo "image_immutable_tag=ameeuw/${{ env.GITHUB_REPOSITORY_NAME_PART }}:${{ env.GITHUB_REF_SLUG }}-$(date +%F.%H%M%S)-${{ env.GITHUB_SHA_SHORT }}" >> $GITHUB_ENV
 
       # Make sure the repository has access to the following secrets
       - name: Login to DockerHub
