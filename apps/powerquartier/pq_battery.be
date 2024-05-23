@@ -7,21 +7,72 @@ import webserver
 
 var pq_battery = module('pq_battery')
 
-import persist
-class PqBattery
-  var config
-  var status
-  var schedule
-  var netLoadW
-  var lastSocUpdateTimestampS
+def quantizeNowS(quantizer)
+  var nowS = tasmota.rtc()["local"]
+  return nowS - (nowS % quantizer)
+end
+  
+
+class PqMeter
   var importWh
   var exportWh
+  var netLoadW
+  var lastUpdateTimestampS
 
   def init()
-    self.lastSocUpdateTimestampS = tasmota.rtc()["local"]
+    self.lastUpdateTimestampS = tasmota.rtc()["local"]
     self.netLoadW = 0
     self.importWh = 0
     self.exportWh = 0
+    tasmota.add_cron("* */1 * * * *", def () self.update() end, "meter_update")
+    tasmota.add_cron("* */15 * * * *", def () self.sendMeasurements() end, "meter_send")
+  end
+
+  def update()
+    var nowS = tasmota.rtc()["local"]
+    var deltaTS = nowS - self.lastUpdateTimestampS
+    self.lastUpdateTimestampS = nowS
+    var deltaWorkWh = self.netLoadW * deltaTS / 3600.0 / 1000
+
+    if (deltaWorkWh > 0)
+      self.exportWh += deltaWorkWh
+    else
+      self.importWh -= deltaWorkWh
+    end
+  end
+
+  def sendMeasurements()
+    var nowQuantizedS = quantizeNowS(15 * 60)
+    var tString = tasmota.strftime("%Y-%m-%dT%H:%M:%S", nowQuantizedS)
+    print(tString)
+    var measurement = {
+      "timestamp": tString,
+      "tags": {
+        "muid": "tbd"
+      },
+      fields: {
+        "0100011D00FF": self.importWh,
+        "0100021D00FF": self.exportWh
+      }
+    }
+    print(measurement)
+    self.importWh = 0
+    self.exportWh = 0
+  end
+
+end
+
+import persist
+class PqBattery
+  var config, status, schedule
+  var netLoadW
+  var lastSocUpdateTimestampS
+  var meter
+
+  def init()
+    self.meter = PqMeter()
+    self.lastSocUpdateTimestampS = tasmota.rtc()["local"]
+    self.netLoadW = 0
     if ! persist.has("batteryConfig")
       self.config = {
         "capacityKwh": 30,
@@ -29,32 +80,31 @@ class PqBattery
         "maxDischargeRateKw": 30,
         "chemistry": "LiCoO"
       }
-    else
-      self.config = persist.batteryConfig
       persist.batteryConfig = self.config
       persist.save()
+    else
+      self.config = persist.batteryConfig
     end
     if ! persist.has("batteryStatus")
       self.status = {
         "soc": 50.0,
         "soh": 100.0
       }
-    else
-      self.status = persist.batteryStatus
       persist.batteryStatus = self.status
       persist.save()
+    else
+      self.status = persist.batteryStatus
     end
     if ! persist.has("batterySchedule")
       self.schedule = persist.batterySchedule
-    else
-      self.schedule = {}
       persist.batterySchedule = self.schedule
       persist.save()
+    else
+      self.schedule = {}
+      self.updateSchedule()
     end
-    # tasmota.add_cron("*/15 * * * * *", def () self.tick() end, "every_15_s")
-    # tasmota.add_cron("* */5 * * * *", def () self.tick() end, "every_5_m")
-    # tasmota.add_cron("* */15 * * * *", def () self.tick() end, "every_15_m")
-    # tasmota.add_cron("* * */0 * * *", def () self.updateSchedule() end, "every_24_h")
+    tasmota.add_cron("* */5 * * * *", def () self.tick() end, "every_1_m")
+    tasmota.add_cron("* * */0 * * *", def () self.updateSchedule() end, "every_24_h")
   end
 
   def updateSchedule()
@@ -65,13 +115,11 @@ class PqBattery
       var uri = "/forecastmaker/community/" + cuid + "/forecast"
       var forecast = pqClient.get_uri(uri)
 
-      var nowS = tasmota.rtc()["local"] 
-      # TODO: Remove this line - predates the schedule by 2 hours
-      nowS = nowS - 2 * 60 * 60
-
-      var dtS = 15 * 60
-      var nowQuantizedS = nowS - (nowS % dtS)
+      var nowQuantizedS = quantizeNowS(15 * 60)
       
+      # TODO: Remove this line - predates the schedule by 2 hours
+      nowQuantizedS -= 2 * 60 * 60
+
       var schedule = {}
       for i:0..(forecast["production"].size()-1)
         var netLoadW = (forecast["consumption"][i][1] + forecast["production"][i][1]) * 4
@@ -92,74 +140,52 @@ class PqBattery
     end
   end
 
-  def updateNetLoad()
-    self.updateSoc()
-    var nowS = tasmota.rtc()["local"]
-    var dtS = 15 * 60
-    var nowQuantizedS = nowS - (nowS % dtS)
-    var tString = tasmota.strftime("%Y-%m-%dT%H:%M:%S", nowQuantizedS)
-    print(tString)
-    if self.schedule.has(nowQuantizedS)
-      print("Found netLoad setpoint: ")
-      self.netLoadW = self.schedule[nowQuantizedS]
-      print(self.netLoadW)
-    else
-      print("No netLoad setpoint found.")
-      self.netLoadW = 0
-    end
+  def updateNetLoad(netLoadW)
+    self.netLoadW = netLoadW
+    self.meter.netLoadW = self.netLoadW
   end
 
-  def sendMeasurements()
-    var nowS = tasmota.rtc()["local"]
-    var dtS = 15 * 60
-    var nowQuantizedS = nowS - (nowS % dtS)
+  def updateScheduledNetLoad()
+    var nowQuantizedS = quantizeNowS(15 * 60)
     var tString = tasmota.strftime("%Y-%m-%dT%H:%M:%S", nowQuantizedS)
     print(tString)
-    var measurement = {
-      "timestamp": tString,
-      "tags": {
-        "muid": "tbd"
-      },
-      fields: {
-        "0100011D00FF": self.importWh,
-        "0100021D00FF": self.exportWh
-      }
-    }
-    print(measurement)
-    self.importWh = 0
-    self.exportWh = 0
+    var netLoadW = 0
+    if self.schedule.has(nowQuantizedS)
+      print("Found netLoad setpoint: ")
+      netLoadW = self.schedule[nowQuantizedS]
+      print(netLoadW)
+    else
+      print("No netLoad setpoint found.")
+    end
+    self.updateNetLoad(netLoadW)
   end
 
   def updateSoc()
     var nowS = tasmota.rtc()["local"]
-    var dtS = nowS - self.lastSocUpdateTimestampS
+    var deltaTS = nowS - self.lastSocUpdateTimestampS
     self.lastSocUpdateTimestampS = nowS
-    var workWh = self.netLoadW * dtS / 3600.0 / 1000
-    self.status["soc"] -= workWh / self.config["capacityKwh"] * 100
-
-    if (workWh > 0)
-      self.exportWh += workWh
-    else
-      self.importWh -= workWh
-    end
+    var deltaWorkWh = self.netLoadW * deltaTS / 3600.0 / 1000
+    self.status["soc"] -= deltaWorkWh / self.config["capacityKwh"] * 100
 
     print("Update SoC")
-    print(dtS)
+    print(deltaTS)
     print(self.netLoadW)
     print(self.status["soc"])
 
     if self.status["soc"] > 100
       self.status["soc"] = 100
-      self.netLoadW = 0
+      self.updateNetLoad(0)
     end
     if self.status["soc"] < 0
       self.status["soc"] = 0
-      self.netLoadW = 0
+      self.updateNetLoad(0)
     end
   end
 
   def tick()
-    print("Battery: tick")
+    print("Battery: tick()")
+    self.updateSoc()
+    self.updateScheduledNetLoad()
   end
 end
   
