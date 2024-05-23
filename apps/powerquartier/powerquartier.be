@@ -35,6 +35,18 @@ class Client
         var response=cl.get_string()
         return json.load(response)
     end
+
+    def post(uri, payload)
+        import json
+        var cl = webclient()
+        var cookie = self.post_auth()
+        cl.begin(self.base_url + uri)
+        cl.add_header("Accept", "*/*")
+        cl.add_header("cookie", cookie)
+        var code=cl.POST(json.dumps(payload))
+        var response=cl.get_string()
+        return json.load(response)
+    end
 end
 
 class PriceChart
