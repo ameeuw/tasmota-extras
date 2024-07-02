@@ -66,16 +66,13 @@ class PqApp
 
     def start()
         if !tasmota.wifi()["up"]
-            print(wd)
             print("WiFi not available - timeout 10 seconds")
             tasmota.set_timer(10000,/ -> self.start())
-        return
+            return
         else
 
             import persist
             import powerquartier
-
-
             if persist.has("email") && persist.has("password")
                 var email = persist.email
                 var password = bytes().fromb64(persist.password).asstring()
@@ -89,11 +86,17 @@ class PqApp
                     var ip = tasmota.wifi()["ip"]
                     self.qr = QrCode()
                     self.qr.update("http://" + ip + "/pq_accounts")
+                    print("Account not set - timeout 10 seconds")
+                    tasmota.set_timer(10000,/ -> self.start())
+                    return
                 end
             else
                 var ip = tasmota.wifi()["ip"]
                 self.qr = QrCode()
                 self.qr.update("http://" + ip + "/pq_credentials")
+                print("Credentials not set - timeout 10 seconds")
+                tasmota.set_timer(10000,/ -> self.start())
+                return
             end
         end
 
