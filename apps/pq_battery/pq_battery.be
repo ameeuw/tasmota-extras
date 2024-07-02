@@ -303,6 +303,8 @@ class PqBatteryUi
     end
 end  
 
+pq_battery.PqMeter=PqMeter
+pq_battery.PqBattery=PqBattery
 pq_battery.PqBatteryUi=PqBatteryUi
 
 
