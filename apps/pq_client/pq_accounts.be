@@ -8,12 +8,17 @@ import webserver
 var pq_accounts = module('pq_accounts')
   
 class PqAccountsUi
-  var auid
+  var auid, base_url
   def init()
     if ! persist.has("auid")
       self.auid = ""
     else
       self.auid = persist.auid
+    end
+    if ! persist.has("base_url")
+      self.base_url = "https://develop.exnaton.com/api/v2"
+    else
+      self.base_url = persist.base_url
     end
 
   end
@@ -43,7 +48,7 @@ class PqAccountsUi
       webserver.content_send("<style>label{display:block;}</style>")
       if persist.has("email") && persist.has("password")
         import powerquartier
-        var pqClient = powerquartier.Client(persist.email, bytes().fromb64(persist.password).asstring())
+        var pqClient = powerquartier.Client(persist.email, bytes().fromb64(persist.password).asstring(), persist.base_url)
         webserver.content_send("<p>PowerQuartier User: " + pqClient.email + "</p>")
         webserver.content_send(format("<legend><b title='PowerQuartier'>Accounts</b></legend>"))
         webserver.content_send("<p><form id=pq_accounts style='display: block;' action='/pq_accounts' method='post'>")

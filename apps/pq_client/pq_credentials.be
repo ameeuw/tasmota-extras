@@ -8,7 +8,7 @@ import webserver
 var pg_credentials = module('pg_credentials')
   
 class PqCredentialsUi
-  var email, password
+  var email, password, base_url
   def init()
     if ! persist.has("email")
       self.email = ""
@@ -19,6 +19,11 @@ class PqCredentialsUi
       self.password= ""
     else
       self.password = bytes().fromb64(persist.password).asstring()
+    end
+    if ! persist.has("base_url")
+      self.base_url = "https://develop.exnaton.com/api/v2"
+    else
+      self.base_url = persist.base_url
     end
   end
   
@@ -43,6 +48,8 @@ class PqCredentialsUi
       webserver.content_send(format("<td style='width:300px'><input type='email' name='email' value='%s'></td></tr>", self.email))
       webserver.content_send("<tr><td style='width:100px'><b>Password</b></td>")
       webserver.content_send(format("<td style='width:300px'><input type='password' name='password' value='%s'></td></tr>", self.password))
+      webserver.content_send("<tr><td style='width:100px'><b>Base URL</b></td>")
+      webserver.content_send(format("<td style='width:300px'><input name='base_url' value='%s'></td></tr>", self.base_url))
       webserver.content_send("</table><hr>")
       webserver.content_send("<button name='store_credentials' class='button bgrn'>Save</button>")
       webserver.content_send("</form></p>")
@@ -58,6 +65,7 @@ class PqCredentialsUi
           # read arguments
           persist.email = webserver.arg("email")
           persist.password = bytes().fromstring(webserver.arg("password")).tob64()
+          persist.base_url = webserver.arg("base_url")
           persist.save()
           webserver.redirect("/cn?")
         end
