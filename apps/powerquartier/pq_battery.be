@@ -14,21 +14,29 @@ end
   
 
 class PqMeter
-  var importWh
-  var exportWh
-  var netLoadW
-  var lastUpdateTimestampS
+  var importWh, exportWh, netLoadW
+  var lastUpdateTimestampS,  tickCount
 
   def init()
-    self.lastUpdateTimestampS = tasmota.rtc()["local"]
+    import persist
     self.netLoadW = 0
     self.importWh = 0
     self.exportWh = 0
-    tasmota.add_cron("* */1 * * * *", def () self.update() end, "meter_update")
-    tasmota.add_cron("* */15 * * * *", def () self.sendMeasurements() end, "meter_send")
+    self.lastUpdateTimestampS = tasmota.rtc()["local"]
+    self.tickCount = 0
+    tasmota.add_cron("* */1 * * * *", def () self.tick() end, "every_1_m")
   end
 
-  def update()
+  def tick()
+    self.tickCount += 1
+    self.updateRegisters()
+    if (self.tickCount % 15 == 0)
+      self.sendMeasurements()
+      self.tickCount = 0
+    end
+  end
+
+  def updateRegisters()
     var nowS = tasmota.rtc()["local"]
     var deltaTS = nowS - self.lastUpdateTimestampS
     self.lastUpdateTimestampS = nowS
@@ -50,7 +58,7 @@ class PqMeter
       "tags": {
         "muid": "tbd"
       },
-      fields: {
+      "fields": {
         "0100011D00FF": self.importWh,
         "0100021D00FF": self.exportWh
       }
@@ -62,16 +70,18 @@ class PqMeter
 
 end
 
-import persist
 class PqBattery
   var config, status, schedule
   var netLoadW
   var lastSocUpdateTimestampS
   var meter
+  var tickCount
 
   def init()
+    import persist
     self.meter = PqMeter()
     self.lastSocUpdateTimestampS = tasmota.rtc()["local"]
+    self.tickCount = 0
     self.netLoadW = 0
     if ! persist.has("batteryConfig")
       self.config = {
@@ -184,8 +194,13 @@ class PqBattery
 
   def tick()
     print("Battery: tick()")
+
+    self.tickCount += 1
     self.updateSoc()
     self.updateScheduledNetLoad()
+    if (tickCount % 15 == 0)
+      self.tickCount = 0
+    end
   end
 end
   
