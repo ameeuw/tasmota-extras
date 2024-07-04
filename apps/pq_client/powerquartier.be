@@ -38,6 +38,7 @@ class Client
         cl.add_header("cookie", cookie)
         cl.GET()
         var response=cl.get_string()
+        print("response: " + response)
         return json.load(response)
     end
 

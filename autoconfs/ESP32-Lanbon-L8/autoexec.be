@@ -64,7 +64,7 @@ def btn_event_cb(obj, event)
     var buttonChannel = findinlist(buttons, obj)
     if buttonChannel != nil # && event == lv.EVENT_VALUE_CHANGED
         var val = buttonChannel[0].get_state() < 3
-        tasmota.set_power(buttonChannel[1], !val)
+        tasmota.set_power(buttonChannel[1], !val) # To switch a light bulb
     end
 end
 
