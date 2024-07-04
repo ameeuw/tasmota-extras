@@ -1,5 +1,27 @@
 var pq_app = module('pq_app')
 
+
+class LoadScheduler
+    var main_cont, wrapper
+    def init()
+        self.main_cont = lv.obj(lv.scr_act())
+        self.main_cont.set_size(480, 240)
+        self.main_cont.set_pos(0, 0)
+
+        self.wrapper = lv.obj(self.main_cont)
+        self.wrapper.remove_style_all()
+        self.wrapper.set_size(lv.pct(100), lv.pct(100))
+        self.wrapper.set_flex_flow(lv.FLEX_FLOW_COLUMN)
+
+        # some visualisation
+
+        # button for adding new schedule with parameter duration
+    end
+
+
+
+end
+
 class PriceChart
     var main_cont, wrapper, chart, series
     def init()
@@ -55,7 +77,7 @@ class QrCode
 end
 
 class PqApp
-    var pq, chart, qr, auid
+    var pq, chart, qr, auid, costs_series, load_series
     def init()
         if self.qr
             self.qr.delete()
@@ -118,12 +140,14 @@ class PqApp
         var stop = tasmota.strftime("%Y-%m-%dT%H:%M:%S", nowQuantized + (48 * 60 * 60))
         print("getting price from " + start + " to " + stop)
         var uri = "/billing/accounts/" + self.auid + string.format("/avgprice?include_taxes=true&start=%s&stop=%s&interval=1h", start, stop)
-        self.chart.update_series(self.pq.get_uri(uri))
+        self.costs_series= self.pq.get_uri(uri)
+        self.chart.update_series(self.costs_series)
     end
 end
 
 pq_app.PqApp = PqApp
 pq_app.QrCode = QrCode
 pq_app.PriceChart = PriceChart
+pq_app.LoadSchedule = LoadSchedule
 
 return pq_app
