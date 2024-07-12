@@ -7,33 +7,113 @@ import webserver
 
 var pq_battery = module('pq_battery')
 
+class PqLogger
+  var logLevel, name
+  def init(level, name)
+    self.logLevel = level
+    self.name = name
+  end
+
+  def error(message)
+    self.log(1, "ERR: "..message)
+  end
+
+  def info(message)
+    self.log(2, "INF: "..message)
+  end
+
+  def warn(message)
+    self.log(3, "WRN: "..message)
+  end
+
+  def debug(message)
+    self.log(4, "DBG: "..message)
+  end
+
+  def log(level, message)
+    if level <= self.logLevel
+      print(self.name.." | "..message)
+    end
+  end
+end
+
+class PqBatteryUi
+  var labelMeterNetLoadW, labelBatteryNetLoadW, labelArcSoc, arcSoc
+  var battery
+  def init(battery)
+    self.battery = battery
+
+    lv.start()
+    import string
+
+    self.labelBatteryNetLoadW = lv.label(lv.scr_act())
+    self.labelBatteryNetLoadW.set_style_text_color(lv.color(0xFFFFFF), lv.PART_MAIN)
+    self.labelBatteryNetLoadW.set_pos(170,200)
+    self.labelBatteryNetLoadW.set_style_text_font(lv.montserrat_font(28), lv.PART_MAIN)
+    # self.labelBatteryNetLoadW.set_text(string.format("%d W", battery.netLoadW))
+
+
+    self.labelMeterNetLoadW = lv.label(lv.scr_act())
+    self.labelMeterNetLoadW.set_style_text_color(lv.color(0xFFFFFF), lv.PART_MAIN)
+    self.labelMeterNetLoadW.set_pos(170,240)
+    self.labelMeterNetLoadW.set_style_text_font(lv.montserrat_font(28), lv.PART_MAIN)
+    # self.labelMeterNetLoadW.set_text(string.format("%d W", battery.meter.netLoadW))
+    
+    self.labelArcSoc = lv.label(lv.scr_act())
+    self.labelArcSoc.set_style_text_color(lv.color(0xFFFFFF), lv.PART_MAIN)
+    self.labelArcSoc.set_style_text_font(lv.montserrat_font(28), lv.PART_MAIN)
+    self.arcSoc = lv.arc(lv.scr_act())
+    self.arcSoc.set_size(240, 240)
+    self.arcSoc.set_rotation(135)
+    self.arcSoc.set_bg_angles(0, 270)
+    # self.arcSoc.set_value(battery.status["soc"])
+    self.arcSoc.set_pos(120,120)
+    
+    self.arcSoc.add_event_cb(/->self.value_changed_event_cb(), lv.EVENT_VALUE_CHANGED, 0)
+    # arcSoc.send_event(lv.EVENT_VALUE_CHANGED, self.labelArcSoc)
+
+    tasmota.add_cron("*/1 * * * * *", / -> self.updateUi(), "every_1_s")
+
+  end
+
+  def value_changed_event_cb(obj, event)
+    import string
+    self.labelArcSoc.set_text(string.format("%d%%", self.arcSoc.get_value()))
+    self.arcSoc.rotate_obj_to_angle(self.labelArcSoc, 25)
+  end
+
+  def updateUi()
+    import string
+    self.labelBatteryNetLoadW.set_text(string.format("%d W", self.battery.netLoadW))
+    self.labelMeterNetLoadW.set_text(string.format("%d W", self.battery.meter.netLoadW))
+    self.arcSoc.set_value(int(self.battery.status["soc"]))
+    self.arcSoc.send_event(lv.EVENT_VALUE_CHANGED, self.labelArcSoc)
+  end
+end
+
 def quantizeNowS(quantizer)
-  var nowS = tasmota.rtc()["local"]
+  var nowS = tasmota.rtc()["utc"]
   return nowS - (nowS % quantizer)
 end
-  
 
 class PqMeter
   var importWh, exportWh, netLoadW
-  var lastUpdateTimestampS,  tickCount
+  var lastUpdateTimestampS
+  var log
 
   def init()
     import persist
+    self.log = PqLogger(4, "Meter")
     self.netLoadW = 0
     self.importWh = 0
     self.exportWh = 0
     self.lastUpdateTimestampS = tasmota.rtc()["local"]
-    self.tickCount = 0
-    tasmota.add_cron("* */1 * * * *", def () self.tick() end, "every_1_m")
-  end
+    # tasmota.add_cron("*/15 * * * * *", / -> self.updateRegisters(), "every_15_s")
+    # tasmota.add_cron("0 */15 * * * *", / -> self.sendMeasurements(), "every_15_m")
 
-  def tick()
-    self.tickCount += 1
-    self.updateRegisters()
-    if (self.tickCount % 15 == 0)
-      self.sendMeasurements()
-      self.tickCount = 0
-    end
+    tasmota.add_cron("*/1 * * * * *", / -> self.updateRegisters(), "every_1_s")
+    tasmota.add_cron("0 */1 * * * *", / -> self.sendMeasurements(), "every_1_m")
+
   end
 
   def updateRegisters()
@@ -43,27 +123,29 @@ class PqMeter
     var deltaWorkWh = self.netLoadW * deltaTS / 3600.0 / 1000
 
     if (deltaWorkWh > 0)
-      self.exportWh += deltaWorkWh
+      self.importWh += deltaWorkWh
     else
-      self.importWh -= deltaWorkWh
+      if (deltaWorkWh < 0)
+        self.exportWh += deltaWorkWh
+      end
     end
   end
 
   def sendMeasurements()
     var nowQuantizedS = quantizeNowS(15 * 60)
-    var tString = tasmota.strftime("%Y-%m-%dT%H:%M:%S", nowQuantizedS)
-    print(tString)
+    var tString = tasmota.strftime("%Y-%m-%dT%H:%M:%S", tasmota.rtc()["local"])
+    self.log.info(tString)
     var measurement = {
       "timestamp": tString,
       "tags": {
-        "muid": "tbd"
+        "muid": "e5ddaa76-a77f-4da4-acb3-407290e66907"
       },
       "fields": {
         "0100011D00FF": self.importWh,
         "0100021D00FF": self.exportWh
       }
     }
-    print(measurement)
+    self.log.info(measurement)
     self.importWh = 0
     self.exportWh = 0
   end
@@ -75,13 +157,15 @@ class PqBattery
   var netLoadW
   var lastSocUpdateTimestampS
   var meter
-  var tickCount
+  var ui
+  var log
 
   def init()
     import persist
     self.meter = PqMeter()
+    self.log = PqLogger(4, "Battery")
+    self.ui = PqBatteryUi(self)
     self.lastSocUpdateTimestampS = tasmota.rtc()["local"]
-    self.tickCount = 0
     self.netLoadW = 0
     if ! persist.has("batteryConfig")
       self.config = {
@@ -113,36 +197,37 @@ class PqBattery
       self.schedule = {}
       self.updateSchedule()
     end
-    tasmota.add_cron("* */5 * * * *", def () self.tick() end, "every_1_m")
-    tasmota.add_cron("* * */0 * * *", def () self.updateSchedule() end, "every_24_h")
+    tasmota.add_cron("0 * * * * *", / -> self.tick(), "every_1_m")
+    tasmota.add_cron("0 0 */14 * * *", / -> self.updateSchedule(), "every_24_h")
   end
 
   def updateSchedule()
+    import persist
     if persist.has("email") && persist.has("password")
       # import powerquartier
       var pqClient = powerquartier.Client(persist.email, bytes().fromb64(persist.password).asstring())
-      var cuid = "693c029b-a7fb-417b-9d17-a049f1a51ce7"
-      var uri = "/forecastmaker/community/" + cuid + "/forecast"
+      var cuid = "7d097ebd-ceae-4ef4-9c93-906b69110cc0"
+      var uri = "/forecastmaker/community/" + cuid + "/forecast?interval=15m"
       var forecast = pqClient.get_uri(uri)
 
       var nowQuantizedS = quantizeNowS(15 * 60)
       
       # TODO: Remove this line - predates the schedule by 2 hours
-      nowQuantizedS -= 2 * 60 * 60
+      # nowQuantizedS -= 2 * 60 * 60
 
       var schedule = {}
       for i:0..(forecast["production"].size()-1)
         var netLoadW = (forecast["consumption"][i][1] + forecast["production"][i][1]) * 4
-        var timestampS = nowQuantizedS + (i + 1) * dtS
+        var timestampS = nowQuantizedS + i * (15 * 60)
 
         # Clamp netLoadW to maxChargeRateKw and maxDischargeRateKw
-        if netLoadW > self.config["maxChargeRateKw"] * 1000
-          netLoadW = self.config["maxChargeRateKw"] * 1000
-        end
-        if netLoadW < -self.config["maxDischargeRateKw"] * 1000
-          netLoadW = -self.config["maxDischargeRateKw"] * 1000
-        end
-        schedule[timestampS] = netLoadW
+          if netLoadW < -self.config["maxChargeRateKw"] * 1000
+            netLoadW = -self.config["maxChargeRateKw"] * 1000
+          end
+          if netLoadW > self.config["maxDischargeRateKw"] * 1000
+            netLoadW = self.config["maxDischargeRateKw"] * 1000
+          end
+        schedule[timestampS] = -netLoadW
       end
       self.schedule = schedule
       persist.batterySchedule = schedule
@@ -158,29 +243,44 @@ class PqBattery
   def updateScheduledNetLoad()
     var nowQuantizedS = quantizeNowS(15 * 60)
     var tString = tasmota.strftime("%Y-%m-%dT%H:%M:%S", nowQuantizedS)
-    print(tString)
+    self.log.debug("Updating for timestamp: "..nowQuantizedS.." / "..tString)
     var netLoadW = 0
     if self.schedule.has(nowQuantizedS)
-      print("Found netLoad setpoint: ")
       netLoadW = self.schedule[nowQuantizedS]
-      print(netLoadW)
+      self.log.debug("Found netLoad setpoint: "..netLoadW)
     else
-      print("No netLoad setpoint found.")
+      self.log.debug("No netLoad setpoint found.")
     end
+
+    if self.status["soc"] >= 100
+      if netLoadW > 0
+        netLoadW = 0
+      end
+    end
+    if self.status["soc"] <= 0
+      if netLoadW < 0
+        netLoadW = 0
+      end
+    end
+
     self.updateNetLoad(netLoadW)
   end
 
   def updateSoc()
     var nowS = tasmota.rtc()["local"]
+    # Integrate linearly over time from last update
     var deltaTS = nowS - self.lastSocUpdateTimestampS
     self.lastSocUpdateTimestampS = nowS
     var deltaWorkWh = self.netLoadW * deltaTS / 3600.0 / 1000
-    self.status["soc"] -= deltaWorkWh / self.config["capacityKwh"] * 100
+    var deltaSoc = deltaWorkWh / self.config["capacityKwh"] * 100
+    if deltaSoc != 0
+      self.status["soc"] = self.status["soc"] + deltaSoc
+    end
 
-    print("Update SoC")
-    print(deltaTS)
-    print(self.netLoadW)
-    print(self.status["soc"])
+    self.log.debug("Current SoC "..self.status["soc"])
+    self.log.debug("Delta SoC "..deltaSoc)
+    self.log.debug("Delta TS "..deltaTS)
+    self.log.debug("Delta Work Wh "..deltaWorkWh)
 
     if self.status["soc"] > 100
       self.status["soc"] = 100
@@ -193,18 +293,13 @@ class PqBattery
   end
 
   def tick()
-    print("Battery: tick()")
-
-    self.tickCount += 1
     self.updateSoc()
     self.updateScheduledNetLoad()
-    if (tickCount % 15 == 0)
-      self.tickCount = 0
-    end
   end
 end
   
 class PqBatteryUi
+  import persist
   var config
   var status
   def init()
