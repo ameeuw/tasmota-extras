@@ -23,14 +23,14 @@ class PqLogger
 
   def log(level, message)
     if level <= self.logLevel
-      print("heap_free: "..tasmota.memory("heap_free").." | psram_free: "..tasmota.memory("psram_free"))
-      print(self.name.." | "..message)
+      # print("heap_free: "..tasmota.memory("heap_free").." | psram_free: "..tasmota.memory("psram_free"))
+      print(tasmota.time_str(tasmota.rtc()["local"]).." | "..self.name.." | "..message)
     end
   end
 end
 
 class TflProcessor
-  var inputTensor, outputTensor, log
+  var inputTensor, outputTensor, doneCallback, log
   def init()
     self.inputTensor = bytes(-32*20*3*4)
     self.outputTensor = bytes(-11*4)
@@ -40,25 +40,31 @@ class TflProcessor
   def loadModel(modelPath, arenaSize)
     import TFL
     if modelPath == nil
+      # modelPath = "dig-class11_1800_s2.tflite"
       modelPath = "dig-class11_1800_s2_q.tflite"
     end
     if arenaSize == nil
-      arenaSize = 1500000
+      arenaSize = 2000000 # 2MB should be enough for the model and the input/output buffers
     end
     var result = TFL.begin("BUF")
     self.log.debug("TFL.begin result: " .. result)
     var model = open(modelPath).readbytes()
+    self.log.debug("Model size: " .. size(model))
     result = TFL.load(model, self.outputTensor, arenaSize)
     self.log.debug("TFL.load result: " .. result)
   end
 
-  def queueCallback()
+  def statusCallback()
     import TFL
     if TFL.output(self.outputTensor) # check if the output is ready (non-zero)
       tasmota.remove_timer("qcbt0")
       self.log.info("Output received")
       for i:0..10
         print("Val "..i.." : "..self.outputTensor.getfloat(i*4))
+      end
+      if self.doneCallback != nil
+        self.doneCallback()
+        self.doneCallback = nil
       end
     end
     var s = TFL.log() # receive log messages from the TF lite tasks
@@ -67,13 +73,18 @@ class TflProcessor
     end
   end
 
-  def processFrame(inputTensor)
+  def processFrame(inputTensor, doneCallback)
     import TFL
     if inputTensor != nil
       self.inputTensor = inputTensor
     end
+    if doneCallback != nil
+      self.doneCallback = doneCallback
+    end
+    self.log.debug("Processing frame")
     TFL.input(self.inputTensor)
-    tasmota.set_timer(100, /->self.queueCallback(), "qcbt0")
+    self.log.debug("Input set")
+    tasmota.set_timer(100, /->self.statusCallback(), "qcbt0")
   end
 
   def infer()
@@ -117,57 +128,138 @@ class FrameConverter
     end
   end
 
-  def getAreaFromBytes(frameWidth, frameHeight, top, left, width, height, frameBytes, outputFormat)
-    if outputFormat == nil
-      outputFormat = 'float32'
-    end
-    var bitsPerPixel = outputFormat == 'float32' ? 32 : 8
-    var inputTensor = bytes(-width * height * 3 * (bitsPerPixel / 8)) # rgb, 32bit float
-    for y:0..height-1
-      for x:0..width-1
-        for channel:0..2
-          var index = (left + x) * 3 + (top + y) * width * 3 + channel
-          if outputFormat == 'float32'
-            inputTensor.setfloat((x + y * width) * 3 * 4 + channel, frameBytes.get(index))
-          else
-            inputTensor.set((x + y * width) * 3 + channel, frameBytes.get(index))
-          end
+  def indexAreaFromBytesFloat32(width, height, top, left, dimX, dimY, picbytes)
+    var inputTensor = bytes(-dimX * dimY * 3 * 4) # rgb, 32bit float
+    for y:0..dimY-1
+        for x:0..dimX-1
+            for channel:0..2
+                var index = (left + x) * 3 + (top + y) * width * 3 + channel
+                inputTensor.setfloat((x + y * dimX) * 3 * 4 + channel, picbytes.get(index))
+            end
         end
-      end
     end
     return inputTensor
+  end
+
+  def indexAreaFromBytesUint8(width, height, top, left, dimX, dimY, picbytes)
+      var inputTensor = bytes(-dimX * dimY * 3) # rgb888
+      for y:0..dimY-1
+          for x:0..dimX-1
+              for channel:0..2
+                  var index = (left + x) * 3 + (top + y) * width * 3 + channel
+                  inputTensor.set((x + y * dimX) * 3 + channel, picbytes.get(index))
+              end
+          end
+      end
+      return inputTensor
   end
 end
 
 class PqVision
   var processor, converter, log
-  var rectangle
+  var rectangles, rectangleQueue, lastArea
   def init()
+    self.lastArea = bytes()
     self.log = PqLogger(4, "PqVision")
-    self.rectangle = {
-      "top": 66, 
-      "left": 11, 
-      "width": 20, 
-      "height": 32
-    }
+    self.rectangles = [
+      {
+        "top": 74, 
+        "left": 158, 
+        "width": 20, 
+        "height": 32
+      }
+    ]
+    self.rectangleQueue = []
     self.converter = FrameConverter()
     self.processor = TflProcessor()
     self.processor.loadModel()
   end
 
-  def infer(processFrame)
+  def doneCallback()
+    self.log.info("Done")
+    if size(self.rectangleQueue) > 0
+      var rectangle = self.rectangleQueue.pop()
+      self.inferFrame(rectangle, true)
+    end
+  end
+
+  def inferFrame(rectangle, processFrame)
     var result self.converter.convertFrame(1, 6)
     self.log.debug("Frame converted")
     var frameBytes = self.converter.getFrameAsBytes(1)
     self.log.debug("Frame size: "..size(frameBytes))
-    var inputTensor = self.converter.getAreaFromBytes(160, 120, self.rectangle["top"], self.rectangle["left"], self.rectangle["width"], self.rectangle["height"], frameBytes)
-    self.log.debug("Area size: "..size(inputTensor))
+    self.log.debug("Indexing rectangle "..rectangle["top"]..", "..rectangle["left"]..", "..rectangle["width"]..", "..rectangle["height"])
+    var inputTensor = self.converter.indexAreaFromBytesFloat32(320, 240, rectangle["top"], rectangle["left"], rectangle["width"], rectangle["height"], frameBytes)
+    self.lastArea = self.converter.indexAreaFromBytesUint8(320, 240, rectangle["top"], rectangle["left"], rectangle["width"], rectangle["height"], frameBytes)
+    self.log.debug("Area size: "..size(inputTensor))        
     if processFrame != nil
-      self.processor.processFrame(inputTensor)
+      self.processor.processFrame(inputTensor, /->self.doneCallback())
     end
+  end
+
+  def infer(processFrame)
+    self.log.info("Infer")
+    self.inferFrame(self.rectangles[0], processFrame)
+    # self.rectangleQueue.push(self.rectangles[1])
   end
 end
 
+class PqVisionController
+  var vision
+  def init(vision)
+    self.vision = vision
+  end
+
+  def infer()
+    import webserver
+    if !webserver.check_privileged_access() return nil end
+    self.vision.infer(true)
+    webserver.content_response("OK") 
+  end
+
+  def getVisionRectangles()
+    import webserver, json
+    if !webserver.check_privileged_access() return nil end
+    print(self.vision.rectangles)
+    webserver.content_response(json.dump(self.vision.rectangles)) 
+  end
+
+  def setVisionRectangle()
+    import webserver
+    if !webserver.check_privileged_access() return nil end
+    if (
+      webserver.arg("index") != nil && 
+      webserver.arg("top") != nil && 
+      webserver.arg("left") != nil && 
+      webserver.arg("width") != nil && 
+      webserver.arg("height") != nil
+    ) 
+      self.vision.rectangles[int(webserver.arg("index"))] = {
+        "top": int(webserver.arg("top")),
+        "left": int(webserver.arg("left")),
+        "width": int(webserver.arg("width")),
+        "height": int(webserver.arg("height"))
+      }
+    end
+    webserver.content_response("OK") 
+  end
+
+  def getLastArea()
+    import webserver
+    if !webserver.check_privileged_access() return nil end
+    webserver.content_response(self.vision.lastArea.tob64()) 
+  end
+      
+  def web_add_handler()
+    import webserver
+    webserver.on("/pq_vr", / -> self.getVisionRectangles(), webserver.HTTP_GET)
+    webserver.on("/pq_vr", / -> self.setVisionRectangle(), webserver.HTTP_POST)
+    webserver.on("/pq_vi", / -> self.infer(true), webserver.HTTP_POST)
+    webserver.on("/pq_la", / -> self.getLastArea(), webserver.HTTP_GET)
+  end
+end  
+
 
 vision = PqVision()
-vision.infer()
+var pqVisionController = PqVisionController(vision)
+pqVisionController.web_add_handler()
