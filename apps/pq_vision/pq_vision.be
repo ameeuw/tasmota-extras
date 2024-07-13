@@ -1,11 +1,100 @@
+class PqLogger
+  var logLevel, name
+  def init(level, name)
+    self.logLevel = level
+    self.name = name
+  end
 
-def takepicandconvert(frameNumber, toFormat)
-    tasmota.cmd("wcgetframe ".. frameNumber)
-    tasmota.cmd("wcconvertframe" .. frameNumber .. " " .. toFormat)
+  def error(message)
+    self.log(1, "ERR: "..message)
+  end
+
+  def info(message)
+    self.log(2, "INF: "..message)
+  end
+
+  def warn(message)
+    self.log(3, "WRN: "..message)
+  end
+
+  def debug(message)
+    self.log(4, "DBG: "..message)
+  end
+
+  def log(level, message)
+    if level <= self.logLevel
+      print(self.name.." | "..message)
+    end
+  end
 end
 
-# read a picture (jpg) from tas as bytes and return them
-def getpicasbytes(n)
+class TflProcessor
+  var outputTensor, log
+  def init()
+    self.outputTensor = bytes(-11*4)
+    self.log = PqLogger(4, "TflProcessor")
+  end
+
+  def loadModel(modelPath, arenaSize)
+    import TFL
+    if modelPath == nil
+      modelPath = "dig-class11_1800_s2_q.tflite"
+    end
+    if arenaSize == nil
+      arenaSize = 1000000
+    end
+    var result = TFL.begin("BUF")
+    self.log.debug("TFL.begin result: " .. result)
+    var model = open(modelPath).readbytes()
+    result = TFL.load(model, self.outputTensor, arenaSize)
+    self.log.debug("TFL.load result: " .. result)
+  end
+
+  def queueCallback()
+    import TFL
+    if TFL.output(self.outputTensor) # check if the output is ready (non-zero)
+      tasmota.remove_timer("qcbt0")
+      self.log.info("Output received")
+      for i:0..10
+        self.log.info("Val "..i.." : "..self.outputTensor.getfloat(i*4))
+      end
+    end
+    var s = TFL.log() # receive log messages from the TF lite tasks
+    if s
+      self.log.debug(s)
+    end
+  end
+
+  def processFrame(inputTensor)
+    import TFL
+    TFL.input(inputTensor)
+    tasmota.set_timer(100, /->self.queueCallback(), "qcbt0")
+  end
+
+  def infer()
+    var inputTensor = bytes(-32*20*3*4)
+    var values = [246,255,238,233,217,202,172,118,107,183,118,111,169,125,119,161,128,121,157,120,109,163,122,113,159,115,109,166,122,119,156,117,115,156,117,115,153,119,115,150,111,107,156,114,105,162,115,105,152,93,83,192,146,138,255,243,240,255,251,250,255,255,242,220,200,186,161,99,91,188,118,112,171,125,119,161,125,119,164,127,116,166,125,116,172,131,127,164,122,121,166,127,125,157,121,117,157,121,117,158,119,115,164,118,110,166,117,108,162,103,94,174,126,119,249,230,227,255,251,250,255,253,240,220,185,173,155,82,78,179,102,99,168,117,116,163,125,122,177,140,131,175,138,129,170,131,129,168,129,128,169,130,129,173,136,134,168,132,128,161,120,116,159,110,101,161,107,98,165,103,95,167,119,112,248,229,226,255,253,252,255,250,242,221,177,174,92,10,13,127,44,46,96,44,47,123,89,88,146,112,108,133,102,98,126,94,93,113,81,82,116,86,86,132,100,99,121,87,86,98,60,58,79,31,27,111,56,50,117,56,47,158,109,102,255,233,231,255,253,253,255,247,247,217,170,171,94,11,19,100,18,27,50,2,10,39,13,16,43,21,22,26,7,7,12,0,0,10,0,0,12,0,0,29,9,13,37,14,16,34,6,6,45,5,3,50,2,2,76,10,4,151,102,95,255,234,235,255,252,254,255,248,250,221,176,182,89,6,20,98,20,34,62,21,31,43,24,30,21,8,10,13,5,7,61,58,61,83,81,86,58,56,61,10,2,6,30,16,21,43,23,25,52,20,20,57,19,18,68,2,0,149,96,90,255,231,233,255,251,254,255,249,251,221,181,186,81,7,19,96,26,36,52,20,31,11,3,10,72,70,73,137,138,142,157,163,170,164,173,182,149,158,165,106,110,116,67,67,69,37,28,28,43,21,20,44,19,16,65,0,0,136,84,78,252,227,229,255,252,255,255,251,250,212,177,176,77,9,16,86,22,31,70,43,49,127,121,127,177,178,180,193,199,202,188,199,205,188,199,207,181,195,200,178,188,191,132,137,138,67,66,64,24,10,6,51,30,23,73,5,0,137,85,79,255,230,233,255,251,255,255,249,239,211,180,175,79,12,13,68,5,6,117,90,93,181,176,177,196,196,196,178,183,184,132,142,144,134,144,147,170,182,183,188,199,198,173,178,177,125,124,119,25,12,3,49,31,19,98,28,22,152,96,92,255,231,234,255,250,254,255,253,242,209,179,171,76,10,6,72,9,9,137,107,107,197,190,190,193,192,190,135,137,136,33,40,40,8,15,19,113,120,120,172,179,179,200,202,199,166,165,159,80,68,57,45,27,15,100,30,25,154,99,94,255,232,235,255,252,255,255,249,237,215,186,178,80,18,12,83,20,19,106,76,76,179,169,169,170,165,164,80,78,79,23,24,29,32,36,42,0,2,5,130,135,136,192,194,191,187,183,177,101,89,79,39,22,13,92,22,16,148,92,88,255,228,231,255,251,254,255,254,243,210,181,173,77,14,10,88,25,27,50,21,23,97,86,89,86,81,82,8,5,8,0,0,4,0,2,8,0,2,8,126,131,134,197,199,198,191,186,183,98,87,79,42,23,16,85,15,9,144,89,84,254,226,229,255,251,254,255,253,245,211,182,177,79,16,18,85,21,26,37,10,15,10,3,7,4,1,4,64,65,69,102,106,112,122,128,135,133,142,149,177,186,193,192,197,200,150,148,149,71,61,57,43,25,22,86,20,13,148,95,89,255,231,233,255,252,255,255,249,244,210,179,175,81,14,18,84,20,25,51,21,25,33,25,30,11,11,13,116,121,124,190,196,201,190,199,208,183,194,200,190,199,206,170,176,179,82,82,84,7,0,0,47,34,32,85,18,11,150,97,91,255,234,236,255,253,255,255,251,245,223,186,184,82,14,15,92,23,27,47,18,21,31,23,26,5,5,5,116,121,122,188,194,197,191,200,207,189,201,203,194,204,207,178,184,187,106,106,106,9,0,0,54,36,34,75,7,2,145,92,86,255,232,234,255,252,254,255,250,245,220,182,179,83,11,13,91,22,26,49,18,20,34,25,25,15,15,13,73,78,77,109,115,118,113,123,126,164,176,178,187,197,200,194,201,201,152,152,152,67,54,53,33,16,13,65,0,0,141,88,82,255,232,234,255,253,255,255,253,236,216,191,182,74,10,9,87,25,27,42,24,14,28,29,20,30,23,23,37,25,34,21,15,22,3,2,10,74,83,90,152,163,171,196,205,212,184,185,189,103,93,90,16,2,0,55,0,0,132,85,85,254,230,226,255,253,251,255,255,240,209,180,172,74,6,10,93,31,32,47,28,21,27,28,19,34,29,30,38,30,38,44,38,45,29,28,36,8,17,26,140,151,159,192,198,205,183,182,187,88,78,76,19,2,0,63,3,5,145,96,97,255,232,228,255,252,250,255,251,240,220,185,181,84,10,18,94,25,31,47,25,21,22,23,18,22,19,23,30,26,34,38,34,42,38,38,47,10,21,31,135,144,155,201,205,213,184,182,187,92,80,79,21,1,2,62,0,2,150,101,102,255,233,229,255,252,250,255,252,243,221,185,181,87,12,19,94,25,31,69,47,45,59,62,59,47,52,55,34,38,44,39,39,48,39,43,53,13,20,33,129,138,149,191,195,203,185,183,186,106,93,95,16,0,0,67,3,6,156,106,105,255,233,230,255,252,250,255,251,244,225,190,186,104,32,37,97,28,34,123,100,101,161,166,165,153,165,166,85,97,99,8,17,23,29,38,47,0,12,22,122,132,144,189,195,202,187,187,189,115,105,105,15,0,0,66,0,1,153,99,99,255,230,227,255,252,249,255,251,244,220,185,181,90,18,20,79,9,14,155,132,133,194,199,200,185,201,200,131,149,148,45,58,60,30,41,47,45,55,67,137,147,159,189,195,199,182,182,182,108,98,98,24,9,10,67,0,1,150,93,95,255,230,225,255,253,250,255,251,244,221,186,182,78,5,6,70,1,5,132,105,108,187,187,189,190,202,201,172,187,185,151,162,161,139,145,149,157,162,174,191,196,206,193,194,196,125,124,122,36,27,25,42,30,28,84,12,15,160,101,103,255,235,230,255,253,250,255,252,243,215,180,176,83,11,11,90,18,20,75,39,44,152,141,144,188,193,192,194,201,197,201,203,200,198,196,197,199,195,205,206,202,210,165,160,159,57,51,46,23,10,8,41,28,25,77,4,7,151,94,96,255,231,229,255,252,249,255,250,240,224,188,182,88,18,15,100,26,30,56,13,20,73,53,57,126,116,114,168,162,157,171,159,157,198,182,183,198,181,189,166,149,157,90,77,75,33,18,10,37,21,15,44,26,23,64,0,1,147,93,93,255,233,230,255,253,251,255,251,241,221,187,180,89,24,20,100,33,30,60,16,20,37,10,15,38,25,23,72,58,54,81,62,57,118,95,91,128,108,110,60,40,42,23,1,0,43,24,17,41,25,17,40,27,20,58,0,0,140,91,92,255,232,230,255,254,251,255,250,241,214,185,177,72,19,12,81,26,23,63,26,25,51,27,26,37,21,15,27,15,4,25,8,0,22,1,0,13,0,0,34,15,12,49,28,21,33,16,6,31,22,10,37,29,18,49,0,0,130,91,90,247,229,226,254,253,251,255,253,244,205,187,178,49,13,5,74,34,27,51,26,21,41,22,20,44,34,23,41,31,19,41,30,13,45,30,17,43,33,22,35,23,13,38,22,13,40,24,14,26,21,7,30,28,13,48,6,6,132,100,99,249,239,236,255,255,253,253,253,244,194,189,179,19,0,0,51,30,22,38,27,19,28,22,15,24,22,8,23,20,6,27,23,3,27,23,2,20,21,3,23,21,6,30,20,7,30,20,8,26,26,13,28,33,18,20,0,0,116,93,89,238,237,231,249,254,253,253,255,250,186,187,180,9,0,0,48,39,30,35,35,24,28,29,20,20,22,10,25,28,12,20,23,0,20,26,2,16,22,0,19,22,2,25,16,6,22,12,2,20,25,10,24,34,18,13,0,0,112,101,95,238,244,238,246,255,254,248,254,250,188,190,185,4,3,0,40,40,31,31,39,28,23,31,20,14,23,8,14,21,6,13,24,1,23,36,8,23,36,8,32,37,18,37,29,18,23,13,5,18,21,8,26,36,22,9,0,0,105,101,93,231,243,234,241,255,252,251,255,255,190,192,189,0,3,0,62,66,58,74,84,72,28,38,26,13,24,10,34,42,27,61,77,51,70,85,58,77,92,65,79,84,65,82,77,65,65,57,50,32,36,24,33,43,29,6,1,0,101,102,93,229,243,237,243,255,255]
+    for i:0..(size(values)-1)
+        inputTensor.setfloat(i*4, values[i])
+    end
+    self.processFrame(inputTensor)
+  end
+
+end
+
+class FrameConverter
+  var log
+  def init()
+    self.log = PqLogger(4, "FrameConverter")
+  end
+
+  def convertFrame(frameNumber, toFormat)
+    tasmota.cmd("wcgetframe ".. frameNumber)
+    tasmota.cmd("wcconvertframe" .. frameNumber .. " " .. toFormat)
+  end
+
+  # read a picture (jpg) from tas as bytes and return them
+  def getFrameAsBytes(n)
     # get an image
     var cmd = "Wcgetpicstore" .. n
     var resobj = tasmota.cmd(cmd);
@@ -13,59 +102,66 @@ def getpicasbytes(n)
     var addr = resobj['WCGetpicstore']['addr']
     var len = resobj['WCGetpicstore']['len']
     if len
-        print('got picture')
-        import introspect
-        var p = introspect.toptr(addr) # p is now of type ptr:
-        var b = bytes(p, len) # b is now an unmanaged bytes object:  b.ismapped() should return true
-        return b
+      self.log.debug('got picture')
+      import introspect
+      var p = introspect.toptr(addr) # p is now of type ptr:
+      var b = bytes(p, len) # b is now an unmanaged bytes object:  b.ismapped() should return true
+      return b
     else 
-        print('no picture')
-        return nil
+      self.log.debug('no picture')
+      return nil
     end
-end
+  end
 
-def saveraw()
-    var picbytes = getpicasbytes(1)
-    if picbytes
-        var f = open('/pic.bmp', 'w')
-        f.write(picbytes)
-        f.close()
+  def getAreaFromBytes(frameWidth, frameHeight, top, left, width, height, frameBytes, outputFormat)
+    if outputFormat == nil
+      outputFormat = 'float32'
     end
-end
-
-# options: options struture, picnum 0-4, relpath relative to options['basefolder']
-# save to either SD or post to web if options['http']
-def savepicraw(options, picnum, relpath)
-    if options['http']
-        # post to web
-        var picbytes = self.getpicasbytes(picnum);
-        if picbytes
-            self.posttoweb(options, relpath, picbytes)
+    var bitsPerPixel = outputFormat == 'float32' ? 32 : 8
+    var inputTensor = bytes(-width * height * 3 * (bitsPerPixel / 8)) # rgb, 32bit float
+    for y:0..height-1
+      for x:0..width-1
+        for channel:0..2
+          var index = (left + x) * 3 + (top + y) * width * 3 + channel
+          if outputFormat == 'float32'
+            inputTensor.setfloat((x + y * width) * 3 * 4 + channel, frameBytes.get(index))
+          else
+            inputTensor.set((x + y * width) * 3 + channel, frameBytes.get(index))
+          end
         end
-    else
-        # save to local FS using tas function
-        var cmd = "wcsavepic" .. picnum .." ".. options['basefolder'] .. '/' .. relpath
-        var resobj = tasmota.cmd(cmd);
-        print('saved pic '..cmd..resobj)
-    end
-end
-
-
-def indexAreaFromBytes(width, height, top, left, dimX, dimY, picbytes)
-    var inputTensor = bytes(-dimX*dimY*3*4) # rgb, 32bit float
-    for i:0..dimY-1
-        for j:0..dimX-1
-            for channel:0..2
-                inputTensor.setfloat(4*i+j+channel,picbytes.getfloat((top + i) * width + left + j + channel*4))
-            end
-        end
+      end
     end
     return inputTensor
+  end
 end
 
-indexAreaFromBytes(96,96, 0,0, 32, 20, getpicasbytes(1))
+class PqVision
+  var processor, converter, log
+  var rectangle
+  def init()
+    self.log = PqLogger(4, "PqVision")
+    self.rectangle = {
+      "top": 107, 
+      "left": 10, 
+      "width": 20, 
+      "height": 32
+    }
+    self.converter = FrameConverter()
+    self.processor = TflProcessor()
+    self.processor.loadModel()
+  end
 
-takepicandconvert(1,6)
-a = getpicasbytes(1)
-print(a.size())
-a.tob64()
+  def infer()
+    var result self.converter.convertFrame(1, 6)
+    self.log.debug("Frame converted")
+    var frameBytes = self.converter.getFrameAsBytes(1)
+    self.log.debug("Frame size: "..size(frameBytes))
+    var inputTensor = self.converter.getAreaFromBytes(160, 120, self.rectangle["top"], self.rectangle["left"], self.rectangle["width"], self.rectangle["height"], frameBytes)
+    self.log.debug("Area size: "..size(inputTensor))
+    self.processor.processFrame(inputTensor)
+  end
+end
+
+
+vision = PqVision()
+vision.infer()
