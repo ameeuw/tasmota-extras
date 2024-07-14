@@ -118,8 +118,10 @@ class FrameConverter
   end
 
   def convertFrame(frameNumber, toFormat)
-    tasmota.cmd("wcgetframe ".. frameNumber)
-    tasmota.cmd("wcconvertframe" .. frameNumber .. " " .. toFormat)
+    var result = tasmota.cmd("wcgetframe ".. frameNumber)
+    self.log.debug("Got frame "..result)
+    result = tasmota.cmd("wcconvertframe" .. frameNumber .. " " .. toFormat)
+    self.log.debug("Converted frame "..result)
   end
 
   # read a picture (jpg) from tas as bytes and return them
@@ -167,11 +169,12 @@ end
 
 class PqVision
   var processor, converter, log
-  var rectangles, rectangleQueue, lastArea, inputTensor
+  var rectangles, rectangleQueue, lastArea, inputTensor, busy
   def init()
     self.lastArea = bytes()
     self.inputTensor = bytes(-32*20*3*4)
     self.log = PqLogger(4, "PqVision")
+    self.busy = false
     self.rectangles = [
       {
         "top": 74, 
@@ -188,13 +191,30 @@ class PqVision
 
   def doneCallback()
     self.log.info("Done")
-    if size(self.rectangleQueue) > 0
-      var rectangle = self.rectangleQueue.pop()
-      self.inferFrame(rectangle, true)
+    self.busy = false
+  end
+
+  def processNextRectangle()
+    self.log.debug("Processing next rectangle")
+    if (!self.busy)
+      self.log.debug("Not busy")
+      if (size(self.rectangleQueue) > 0)
+        self.log.debug("Queue not empty")
+        self.busy = true
+        var rectangle = self.rectangleQueue.pop()
+        self.inferFrame(rectangle)
+        self.log.debug("Setting timer")
+        tasmota.set_timer(2000, /->self.processNextRectangle(), "qcbt1")
+      else
+        self.log.debug("Queue empty -- stopping timer")
+        tasmota.remove_timer("qcbt1")
+      end
+    else
+      self.log.debug("Busy")
     end
   end
 
-  def inferFrame(rectangle, processFrame)
+  def inferFrame(rectangle)
     var result self.converter.convertFrame(1, 6)
     self.log.debug("Frame converted")
     var frameBytes = self.converter.getFrameAsBytes(1)
@@ -202,16 +222,18 @@ class PqVision
     self.log.debug("Indexing rectangle "..rectangle["top"]..", "..rectangle["left"]..", "..rectangle["width"]..", "..rectangle["height"])
     self.inputTensor = self.converter.indexAreaFromBytesFloat32(320, 240, rectangle["top"], rectangle["left"], rectangle["width"], rectangle["height"], frameBytes)
     self.lastArea = self.converter.indexAreaFromBytesUint8(320, 240, rectangle["top"], rectangle["left"], rectangle["width"], rectangle["height"], frameBytes)
-    self.log.debug("Area size: "..size(self.inputTensor))        
-    if processFrame != nil
-      self.processor.processFrame(self.inputTensor, /->self.doneCallback())
-    end
+    self.log.debug("Area size: "..size(self.inputTensor))
+    self.processor.processFrame(self.inputTensor, /->self.doneCallback())
   end
 
-  def infer(processFrame)
+  def infer()
     self.log.info("Infer")
-    self.inferFrame(self.rectangles[0], processFrame)
-    # self.rectangleQueue.push(self.rectangles[1])
+    if (size(self.rectangles) > 0)
+      for i:0..(size(self.rectangles)-1)
+        self.rectangleQueue.push(self.rectangles[i])
+      end
+      self.processNextRectangle()
+    end
   end
 end
 
@@ -244,13 +266,19 @@ class PqVisionController
       webserver.arg("left") != nil && 
       webserver.arg("width") != nil && 
       webserver.arg("height") != nil
-    ) 
-      self.vision.rectangles[int(webserver.arg("index"))] = {
+    )
+      var rectangle = {
         "top": int(webserver.arg("top")),
         "left": int(webserver.arg("left")),
         "width": int(webserver.arg("width")),
         "height": int(webserver.arg("height"))
       }
+      if (self.vision.rectangles.size() > int(webserver.arg("index")))
+        self.vision.rectangles[int(webserver.arg("index"))] = rectangle
+      else
+        self.vision.rectangles.push(rectangle)
+      end
+    else
     end
     webserver.content_response("OK") 
   end
