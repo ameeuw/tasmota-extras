@@ -130,13 +130,9 @@ class FrameConverter
 
   def indexAreaFromBytesFloat32(width, height, top, left, dimX, dimY, picbytes)
     var inputTensor = bytes(-dimX * dimY * 3 * 4) # rgb, 32bit float
-    for y:0..dimY-1
-        for x:0..dimX-1
-            for channel:0..2
-                var index = (left + x) * 3 + (top + y) * width * 3 + channel
-                inputTensor.setfloat((x + y * dimX) * 3 * 4 + channel, picbytes.get(index))
-            end
-        end
+    var areaBytes = self.indexAreaFromBytesUint8(width, height, top, left, dimX, dimY, picbytes)
+    for i:0..(size(areaBytes)-1)
+      inputTensor.setfloat(i*4, areaBytes[i])
     end
     return inputTensor
   end
@@ -157,9 +153,10 @@ end
 
 class PqVision
   var processor, converter, log
-  var rectangles, rectangleQueue, lastArea
+  var rectangles, rectangleQueue, lastArea, inputTensor
   def init()
     self.lastArea = bytes()
+    self.inputTensor = bytes(-32*20*3*4)
     self.log = PqLogger(4, "PqVision")
     self.rectangles = [
       {
@@ -189,11 +186,11 @@ class PqVision
     var frameBytes = self.converter.getFrameAsBytes(1)
     self.log.debug("Frame size: "..size(frameBytes))
     self.log.debug("Indexing rectangle "..rectangle["top"]..", "..rectangle["left"]..", "..rectangle["width"]..", "..rectangle["height"])
-    var inputTensor = self.converter.indexAreaFromBytesFloat32(320, 240, rectangle["top"], rectangle["left"], rectangle["width"], rectangle["height"], frameBytes)
+    self.inputTensor = self.converter.indexAreaFromBytesFloat32(320, 240, rectangle["top"], rectangle["left"], rectangle["width"], rectangle["height"], frameBytes)
     self.lastArea = self.converter.indexAreaFromBytesUint8(320, 240, rectangle["top"], rectangle["left"], rectangle["width"], rectangle["height"], frameBytes)
-    self.log.debug("Area size: "..size(inputTensor))        
+    self.log.debug("Area size: "..size(self.inputTensor))        
     if processFrame != nil
-      self.processor.processFrame(inputTensor, /->self.doneCallback())
+      self.processor.processFrame(self.inputTensor, /->self.doneCallback())
     end
   end
 
@@ -249,6 +246,12 @@ class PqVisionController
     if !webserver.check_privileged_access() return nil end
     webserver.content_response(self.vision.lastArea.tob64()) 
   end
+
+  def getInputTensor()
+    import webserver
+    if !webserver.check_privileged_access() return nil end
+    webserver.content_response(self.vision.inputTensor.tob64()) 
+  end
       
   def web_add_handler()
     import webserver
@@ -256,6 +259,7 @@ class PqVisionController
     webserver.on("/pq_vr", / -> self.setVisionRectangle(), webserver.HTTP_POST)
     webserver.on("/pq_vi", / -> self.infer(true), webserver.HTTP_POST)
     webserver.on("/pq_la", / -> self.getLastArea(), webserver.HTTP_GET)
+    webserver.on("/pq_it", / -> self.getInputTensor(), webserver.HTTP_GET)
   end
 end  
 
