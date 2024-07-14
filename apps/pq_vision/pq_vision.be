@@ -59,9 +59,11 @@ class TflProcessor
     if TFL.output(self.outputTensor) # check if the output is ready (non-zero)
       tasmota.remove_timer("qcbt0")
       self.log.info("Output received")
-      for i:0..10
-        print("Val "..i.." : "..self.outputTensor.getfloat(i*4))
-      end
+      # for i:0..10
+      #   print("Val "..i.." : "..self.outputTensor.getfloat(i*4))
+      # end
+      var maxIndex = self.findIndexOfMax(self.outputTensor)
+      self.log.info("VALUE: "..maxIndex)
       if self.doneCallback != nil
         self.doneCallback()
         self.doneCallback = nil
@@ -71,6 +73,18 @@ class TflProcessor
     if s
       self.log.debug(s)
     end
+  end
+
+  def findIndexOfMax(outputTensor)
+    var maxIndex = 0
+    var maxVal = outputTensor.getfloat(0)
+    for i:1..10
+      if outputTensor.getfloat(i*4) > maxVal
+        maxVal = outputTensor.getfloat(i*4)
+        maxIndex = i
+      end
+    end
+    return maxIndex
   end
 
   def processFrame(inputTensor, doneCallback)
