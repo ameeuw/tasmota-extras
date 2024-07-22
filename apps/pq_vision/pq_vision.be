@@ -169,12 +169,11 @@ end
 
 class PqVision
   var processor, converter, log
-  var rectangles, rectangleQueue, lastArea, inputTensor, busy
+  var rectangles, rectangleQueue, lastArea, inputTensor
   def init()
     self.lastArea = bytes()
     self.inputTensor = bytes(-32*20*3*4)
     self.log = PqLogger(4, "PqVision")
-    self.busy = false
     self.rectangles = [
       {
         "top": 74, 
@@ -191,31 +190,18 @@ class PqVision
 
   def doneCallback()
     self.log.info("Done")
-    self.busy = false
-  end
-
-  def processNextRectangle()
-    self.log.debug("Processing next rectangle")
-    if (!self.busy)
-      self.log.debug("Not busy")
-      if (size(self.rectangleQueue) > 0)
-        self.log.debug("Queue not empty")
-        self.busy = true
-        var rectangle = self.rectangleQueue.pop()
-        self.inferFrame(rectangle)
-        self.log.debug("Setting timer")
-        tasmota.set_timer(2000, /->self.processNextRectangle(), "qcbt1")
-      else
-        self.log.debug("Queue empty -- stopping timer")
-        tasmota.remove_timer("qcbt1")
-      end
+    if (size(self.rectangleQueue) > 0)
+      self.log.debug("Queue not empty")
+      var rectangle = self.rectangleQueue.pop()
+      self.inferFrame(rectangle)
+      self.log.debug("Setting timer")
     else
-      self.log.debug("Busy")
+      self.log.debug("Queue empty")
     end
   end
 
   def inferFrame(rectangle)
-    var result self.converter.convertFrame(1, 6)
+    self.converter.convertFrame(1, 6)
     self.log.debug("Frame converted")
     var frameBytes = self.converter.getFrameAsBytes(1)
     self.log.debug("Frame size: "..size(frameBytes))
@@ -232,7 +218,7 @@ class PqVision
       for i:0..(size(self.rectangles)-1)
         self.rectangleQueue.push(self.rectangles[i])
       end
-      self.processNextRectangle()
+      self.doneCallback()
     end
   end
 end
