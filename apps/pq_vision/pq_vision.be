@@ -144,6 +144,34 @@ class FrameConverter
     end
   end
 
+  def getResolution()
+    var resobj = tasmota.cmd("wcresolution")
+    self.log.debug("wcgetresolution: "..resobj)
+    var resolutions = {
+      0: { "width": 96, "height": 96 },
+      1: { "width": 160, "height": 120 },
+      2: { "width": 176, "height": 144 },
+      3: { "width": 240, "height": 176 },
+      4: { "width": 240, "height": 240 },
+      5: { "width": 320, "height": 240 },
+      6: { "width": 400, "height": 296 },
+      7: { "width": 480, "height": 320 },
+      8: { "width": 640, "height": 480 },
+      9: { "width": 800, "height": 600 },
+      10: { "width": 1024, "height": 768 },
+      11: { "width": 1280, "height": 720 },
+      12: { "width": 1280, "height": 1024 },
+      13: { "width": 1600, "height": 1200 },
+    }
+    if resobj != nil && resobj["WCResolution"] != nil && resolutions[resobj["WCResolution"]] != nil
+      self.log.debug("Resolution: "..resolutions[resobj["WCResolution"]])
+      return resolutions[resobj["WCResolution"]]
+    else
+      self.log.debug("No resolution")
+      return nil
+    end
+  end
+
   def indexAreaFromBytesFloat32(width, height, top, left, dimX, dimY, picbytes)
     var inputTensor = bytes(-dimX * dimY * 3 * 4) # rgb, 32bit float
     var areaBytes = self.indexAreaFromBytesUint8(width, height, top, left, dimX, dimY, picbytes)
@@ -206,8 +234,9 @@ class PqVision
     var frameBytes = self.converter.getFrameAsBytes(1)
     self.log.debug("Frame size: "..size(frameBytes))
     self.log.debug("Indexing rectangle "..rectangle["top"]..", "..rectangle["left"]..", "..rectangle["width"]..", "..rectangle["height"])
-    self.inputTensor = self.converter.indexAreaFromBytesFloat32(320, 240, rectangle["top"], rectangle["left"], rectangle["width"], rectangle["height"], frameBytes)
-    self.lastArea = self.converter.indexAreaFromBytesUint8(320, 240, rectangle["top"], rectangle["left"], rectangle["width"], rectangle["height"], frameBytes)
+    var resolution = self.converter.getResolution()
+    self.inputTensor = self.converter.indexAreaFromBytesFloat32(resolution["width"], resolution["height"], rectangle["top"], rectangle["left"], rectangle["width"], rectangle["height"], frameBytes)
+    self.lastArea = self.converter.indexAreaFromBytesUint8(resolution["width"], resolution["height"], rectangle["top"], rectangle["left"], rectangle["width"], rectangle["height"], frameBytes)
     self.log.debug("Area size: "..size(self.inputTensor))
     self.processor.processFrame(self.inputTensor, /->self.doneCallback())
   end
