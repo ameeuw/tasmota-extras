@@ -1,0 +1,16 @@
+{
+    "C_Cpp.intelliSenseEngine": "default",
+    "idf.espIdfPath": "/Users/arne/development/esp-idf",
+    "idf.toolsPath": "/Users/arne/development/esp-idf/tools",
+    "files.associations": {
+        "*.json.liquid": "json",
+        "*.yaml.liquid": "yaml",
+        "*.md.liquid": "markdown",
+        "*.js.liquid": "liquid-javascript",
+        "*.css.liquid": "liquid-css",
+        "*.scss.liquid": "liquid-scss",
+        "ulp_lp_core_uart.h": "c",
+        "ulp_lp_core_utils.h": "c",
+        "stdint.h": "c"
+    }
+}
