@@ -89,7 +89,10 @@ function processULPFiles(directoryPath) {
   let buildTarget = null;
   let sFileContent = null;
   let mapFileContent = null;
-
+  const readTemplate = process.argv.includes("-r");
+  const saveTemplate = process.argv.includes("-s");
+  const verbose = process.argv.includes("-v");
+  const projectName = path.basename(directoryPath);
   if (files.includes("sdkconfig")) {
     console.log("Processing:", "sdkconfig");
     const sdkConfigFile = fs
@@ -121,7 +124,7 @@ function processULPFiles(directoryPath) {
   if (sFileContent && mapFileContent) {
     const mapResult = parseMapFile(mapFileContent, buildTarget);
     const binaryResult = parseBinSFile(sFileContent);
-    const verbose = false;
+    console.log(`Length of binary in bytes: ${binaryResult.length}`);
 
     if (verbose) {
       console.log(mapResult.symbols_keyed);
@@ -134,25 +137,44 @@ function processULPFiles(directoryPath) {
           })
       );
     }
+    let template = null;
+    if (readTemplate) {
+      template = getBerryTemplateFile(process.argv[2]);
+    } else {
+      template = "";
+      template += "import ULP \n";
+      template +=
+        "ULP.wake_period(0,1000 * 1000) # timer register 0 - every 1000 millisecs\n";
+      template += 'c = bytes().fromb64("{{code_b64}}") \n';
+      template += "ULP.load(c) \n";
+      template += "ULP.run() \n";
+    }
 
-    const generatedBerryFile = generateBerryFile(mapResult, binaryResult);
+    const generatedBerryFile = generateBerryFile(
+      mapResult,
+      binaryResult,
+      template
+    );
 
     console.log(
       "Generated berry file.\nTo make sure to copy the entire file, run the script with the -v flag.\n"
     );
     if (generatedBerryFile) {
-      if (verbose) console.log(generatedBerryFile);
-    } else {
-      console.log(
-        "! ALL LINES ARE CURTAILED TO 120 CHARACTERS ! \n!COPYING THIS CODE WILL MOST LIKELY NOT WORK!\n\n" +
-          generatedBerryFile
-            .split("\n")
-            .map((line) => line.slice(0, 120))
-            .join("\n")
-      );
+      if (verbose) {
+        console.log(generatedBerryFile);
+      } else {
+        console.log(
+          "! ALL LINES ARE CURTAILED TO 120 CHARACTERS ! \n!COPYING THIS CODE WILL MOST LIKELY NOT WORK!\n\n" +
+            generatedBerryFile
+              .split("\n")
+              .map((line) => line.slice(0, 120))
+              .join("\n")
+        );
+      }
+      if (saveTemplate) {
+        storeBerryFile(directoryPath, generatedBerryFile, projectName);
+      }
     }
-
-    storeBerryFile(directoryPath, generatedBerryFile);
   }
 }
 
@@ -170,8 +192,7 @@ function getBerryTemplateFile(directoryPath) {
   return null;
 }
 
-function generateBerryFile(mapResult, binaryResult) {
-  let template = getBerryTemplateFile(process.argv[2]);
+function generateBerryFile(mapResult, binaryResult, template) {
   if (!mapResult || !binaryResult || !template) return;
 
   template = template.replace("{{code_b64}}", binaryResult.binary64);
@@ -191,10 +212,14 @@ function generateBerryFile(mapResult, binaryResult) {
   return template;
 }
 
-function storeBerryFile(directoryPath, berryFileContent) {
+function storeBerryFile(directoryPath, berryFileContent, projectName) {
   const files = fs.readdirSync(directoryPath);
   if (files.includes("build")) {
-    const buildFilePath = path.join(directoryPath, "build", "lp_uart_echo.be");
+    const buildFilePath = path.join(
+      directoryPath,
+      "build",
+      `${projectName}.be`
+    );
     fs.writeFileSync(buildFilePath, berryFileContent);
   }
 }
