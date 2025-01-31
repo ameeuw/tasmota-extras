@@ -1,40 +1,54 @@
 const fs = require("fs");
 const path = require("path");
 
-var ulp_S_file, ulp_map_file, ulp_binary_length, ulp_build_target;
-
-function parseMapFile() {
+function parseMapFile(mapFileContent, buildTarget) {
   var type = "FSM";
   var symbols = "";
-  for (line of ulp_map_file) {
+  var symbols_keyed = {};
+  for (line of mapFileContent) {
     if (line.includes("PROVIDE (ulp")) {
       let el = line.split("PROVIDE")[1];
+      let prefix = el.replace(/[\(=]/g, "").split("0x")[0].trim();
       let suffix = el.replace(")", "").split("0x")[1];
-      let address = (parseInt(suffix, 16) - 0x50000000) / 4;
-      // console.log(el,suffix,address);
+      let address = null;
+      let suffix_int = parseInt(suffix, 16);
+      if (suffix_int > 0x60000000) {
+        address = (suffix_int - 0x50000000) / 4; // Does somebody have a link to the docs?
+      }
       symbols += "#" + el + " -> ULP.get_mem(" + address + ") \n";
+      if (!symbols_keyed[suffix]) {
+        symbols_keyed[suffix] = [];
+      }
+      symbols_keyed[suffix].push({
+        prefix,
+        suffix,
+        address,
+      });
     }
     if (line.includes("ulp_riscv_run")) {
       type = "RISCV";
     }
   }
   if (symbols.length != 0) {
-    return (
-      "# ULP type: " +
-      type +
-      "\n# Build target: " +
-      ulp_build_target +
-      "\n\n" +
-      symbols
-    );
+    return {
+      type,
+      symbols:
+        "# ULP type: " +
+        type +
+        "\n# Build target: " +
+        buildTarget +
+        "\n\n" +
+        symbols,
+      symbols_keyed,
+    };
   }
-  return "";
+  return { type, symbols: "", symbols_keyed: {} };
 }
 
-function parseBinSFile() {
+function parseBinSFile(sFileContent) {
   var binary = [];
   var words;
-  for (line of ulp_S_file) {
+  for (line of sFileContent) {
     if (line.startsWith(".byte")) {
       tokens = line.split(" ");
       for (token of tokens) {
@@ -48,55 +62,40 @@ function parseBinSFile() {
     }
   }
   if (binary.length == words) {
-    ulp_binary_length = words;
     var _b64 = "";
     for (b of binary) {
       _b64 += String.fromCharCode(b);
     }
-    return btoa(_b64);
+    return {
+      length: words,
+      binary64: btoa(_b64),
+    };
   }
+  return null;
 }
 
 function checkULPSDKConfig(file) {
   for (line of file) {
     let tokens = line.split("=");
     if (tokens[0] == "CONFIG_IDF_TARGET") {
-      ulp_build_target = tokens[1];
+      return tokens[1];
     }
   }
-}
-
-function parseULPFiles() {
-  let map_string = parseMapFile();
-  let binary64 = parseBinSFile();
-  var output = map_string + "\n";
-  output += "# You can paste the following snippet to the berry console: \n";
-  output += "# Length of binary in bytes: " + ulp_binary_length + "\n";
-  output += "import ULP \n";
-  output +=
-    "ULP.wake_period(0,1000 * 1000) # timer register 0 - every 1000 millisecs\n";
-  output += 'c = bytes().fromb64("' + binary64 + '") \n';
-  output += "ULP.load(c) \n";
-  output += "ULP.run() \n";
-  console.log(output);
-}
-
-function checkULPBuildFiles() {
-  if (ulp_S_file && ulp_map_file) {
-    parseULPFiles();
-  }
+  return null;
 }
 
 function processULPFiles(directoryPath) {
-  // Read all files in the directory
   const files = fs.readdirSync(directoryPath);
+  let buildTarget = null;
+  let sFileContent = null;
+  let mapFileContent = null;
 
   if (files.includes("sdkconfig")) {
     console.log("Processing:", "sdkconfig");
     const sdkConfigFile = fs
       .readFileSync(path.join(directoryPath, "sdkconfig"), "utf8")
       .split(/\r\n|\n/);
-    checkULPSDKConfig(sdkConfigFile);
+    buildTarget = checkULPSDKConfig(sdkConfigFile);
   }
 
   if (files.includes("build")) {
@@ -106,17 +105,97 @@ function processULPFiles(directoryPath) {
 
       if (file.endsWith(".bin.S")) {
         console.log("Processing:", file);
-        ulp_S_file = fs.readFileSync(buildFilePath, "utf8").split(/\r\n|\n/);
-        checkULPBuildFiles();
+        sFileContent = fs.readFileSync(buildFilePath, "utf8").split(/\r\n|\n/);
       } else if (file.endsWith(".map")) {
         if (file.includes("bootloader") || buildFilePath.includes("esp-idf")) {
           return;
         }
         console.log("Processing:", file);
-        ulp_map_file = fs.readFileSync(buildFilePath, "utf8").split(/\r\n|\n/);
-        checkULPBuildFiles();
+        mapFileContent = fs
+          .readFileSync(buildFilePath, "utf8")
+          .split(/\r\n|\n/);
       }
     });
+  }
+
+  if (sFileContent && mapFileContent) {
+    const mapResult = parseMapFile(mapFileContent, buildTarget);
+    const binaryResult = parseBinSFile(sFileContent);
+    const verbose = false;
+
+    if (verbose) {
+      console.log(mapResult.symbols_keyed);
+    } else {
+      console.log(
+        Object.values(mapResult.symbols_keyed)
+          .flat()
+          .filter((v) => {
+            return v.address;
+          })
+      );
+    }
+
+    const generatedBerryFile = generateBerryFile(mapResult, binaryResult);
+
+    console.log(
+      "Generated berry file.\nTo make sure to copy the entire file, run the script with the -v flag.\n"
+    );
+    if (generatedBerryFile) {
+      if (verbose) console.log(generatedBerryFile);
+    } else {
+      console.log(
+        "! ALL LINES ARE CURTAILED TO 120 CHARACTERS ! \n!COPYING THIS CODE WILL MOST LIKELY NOT WORK!\n\n" +
+          generatedBerryFile
+            .split("\n")
+            .map((line) => line.slice(0, 120))
+            .join("\n")
+      );
+    }
+
+    storeBerryFile(directoryPath, generatedBerryFile);
+  }
+}
+
+function getBerryTemplateFile(directoryPath) {
+  const files = fs.readdirSync(directoryPath);
+  if (files.find((file) => file.endsWith(".be"))) {
+    const berryFile = files.find((file) => file.endsWith(".be"));
+    console.log("Processing:", berryFile);
+    const berryFileContent = fs.readFileSync(
+      path.join(directoryPath, berryFile),
+      "utf8"
+    );
+    return berryFileContent;
+  }
+  return null;
+}
+
+function generateBerryFile(mapResult, binaryResult) {
+  let template = getBerryTemplateFile(process.argv[2]);
+  if (!mapResult || !binaryResult || !template) return;
+
+  template = template.replace("{{code_b64}}", binaryResult.binary64);
+
+  // Filter by address: not sure about the shifting and dividing by 4 in the parseMapFile
+  // --> we filter by them being larger than 0x60000000
+  const parseableMappings = Object.values(mapResult.symbols_keyed)
+    .flat()
+    .filter((v) => {
+      return v.address;
+    });
+
+  parseableMappings.forEach((v) => {
+    template = template.replace(new RegExp(`{{v.prefix}}`, "g"), v.address);
+  });
+
+  return template;
+}
+
+function storeBerryFile(directoryPath, berryFileContent) {
+  const files = fs.readdirSync(directoryPath);
+  if (files.includes("build")) {
+    const buildFilePath = path.join(directoryPath, "build", "lp_uart_echo.be");
+    fs.writeFileSync(buildFilePath, berryFileContent);
   }
 }
 
