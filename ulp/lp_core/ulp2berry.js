@@ -6,26 +6,26 @@ function parseMapFile(mapFileContent, buildTarget) {
   var symbols = "";
   var symbols_keyed = {};
   for (line of mapFileContent) {
-    if (line.includes("PROVIDE (")) {
-      let el = line.split("PROVIDE")[1];
-      let prefix = el.replace(/[\(=]/g, "").split("0x")[0].trim();
-      let suffix = el.replace(")", "").split("0x")[1];
-      let address = null;
-      let suffix_int = parseInt(suffix, 16);
-      if (suffix_int > 0x60000000) {
-        address = (suffix_int - 0x50000000) / 4; // Does somebody have a link to the docs?
+    if (line.match(/0x[0-9a-fA-F]+\s+ulp_/)) {
+      let [address, symbol] = line.trim().split(/\s+/);
+      let address_int = parseInt(address.replace("0x", ""), 16);
+      let shifted = false;
+      // console.log("address_int", address_int);
+      // console.log("0x50000000", 0x50000000);
+      // console.log(`${address} > 0x50000000`, address_int > 0x50000000);
+      if (address_int > 0x50000000) {
+        address_int = (address_int - 0x50000000) / 4; // Does somebody have a link to the docs?
+        shifted = true;
       }
-
-      if (suffix) {
-        if (!symbols_keyed[suffix]) {
-          symbols_keyed[suffix] = [];
-        }
-        symbols_keyed[suffix].push({
-          prefix,
-          suffix,
-          address,
-        });
+      if (!symbols_keyed[address]) {
+        symbols_keyed[address] = [];
       }
+      symbols_keyed[address].push({
+        prefix: symbol,
+        address,
+        addressInt: address_int,
+        shifted,
+      });
     }
     if (line.includes("ulp_riscv_run")) {
       type = "RISCV";
@@ -125,7 +125,7 @@ function processULPFiles(directoryPath) {
         Object.values(mapResult.symbols_keyed)
           .flat()
           .filter((v) => {
-            return v.address;
+            return v.shifted;
           })
       );
     }
@@ -194,11 +194,14 @@ function generateBerryFile(mapResult, binaryResult, template) {
   const parseableMappings = Object.values(mapResult.symbols_keyed)
     .flat()
     .filter((v) => {
-      return v.address;
+      return v.shifted;
     });
 
   parseableMappings.forEach((v) => {
-    template = template.replace(new RegExp(`{{v.prefix}}`, "g"), v.address);
+    template = template.replace(
+      new RegExp(`{{${v.prefix}}}`, "g"),
+      v.addressInt
+    );
   });
 
   return template;
