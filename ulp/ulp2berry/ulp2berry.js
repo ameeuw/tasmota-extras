@@ -3,32 +3,30 @@ const path = require("path");
 
 function parseMapFile(mapFileContent, buildTarget) {
   var type = "FSM";
-  var symbols = "";
   var symbols_keyed = {};
   for (line of mapFileContent) {
     if (line.match(/0x[0-9a-fA-F]+\s+ulp_/)) {
       let [address, symbol] = line.trim().split(/\s+/);
-      let address_int = parseInt(address.replace("0x", ""), 16);
+      let addressInt = parseInt(address.replace("0x", ""), 16);
       let shifted = false;
-      // console.log("address_int", address_int);
-      // console.log("0x50000000", 0x50000000);
-      // console.log(`${address} > 0x50000000`, address_int > 0x50000000);
-      if (address_int > 0x50000000) {
-        address_int = (address_int - 0x50000000) / 4; // Does somebody have a link to the docs?
+      if (addressInt > 0x50000000) {
+        addressInt = (addressInt - 0x50000000) / 4; // TODO: find docs for the address shift
         shifted = true;
       }
       if (!symbols_keyed[address]) {
         symbols_keyed[address] = [];
       }
       symbols_keyed[address].push({
-        prefix: symbol,
+        symbol,
         address,
-        addressInt: address_int,
+        addressInt,
         shifted,
       });
     }
     if (line.includes("ulp_riscv_run")) {
       type = "RISCV";
+    } else if (line.includes("ulp_lp_core_run")) {
+      type = "LP_CORE";
     }
   }
   return {
@@ -97,7 +95,6 @@ function processULPFiles(directoryPath) {
     const buildFiles = fs.readdirSync(path.join(directoryPath, "build"));
     buildFiles.forEach((file) => {
       const buildFilePath = path.join(directoryPath, "build", file);
-
       if (file.endsWith(".bin.S")) {
         console.log("Processing:", file);
         sFileContent = fs.readFileSync(buildFilePath, "utf8").split(/\r\n|\n/);
@@ -115,9 +112,13 @@ function processULPFiles(directoryPath) {
 
   if (sFileContent && mapFileContent) {
     const mapResult = parseMapFile(mapFileContent, buildTarget);
+    console.log("\nResults:\n");
     const binaryResult = parseBinSFile(sFileContent);
-    console.log(`Length of binary in bytes: ${binaryResult.length}`);
+    console.log(
+      `Binary: "${mapResult.type}" type (${binaryResult.length} bytes)`
+    );
 
+    console.log("Symbol mappings:");
     if (verbose) {
       console.log(mapResult.symbols_keyed);
     } else {
@@ -149,7 +150,7 @@ function processULPFiles(directoryPath) {
     );
 
     console.log(
-      "Generated berry file.\nTo make sure to copy the entire file, run the script with the -v flag.\n"
+      "\nGenerated berry file.\nTo make sure to copy the entire file, run the script with the -v flag.\n"
     );
     if (generatedBerryFile) {
       if (verbose) {
