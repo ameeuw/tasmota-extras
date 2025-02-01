@@ -39,7 +39,6 @@ jobs:
         run: echo "image_name=$imageName:${{ github.event.release.name }}" >> $GITHUB_ENV
 
       - name: Set "latest" tag for each branch
-        if: ${{ github.event_name != 'release' }}
         run: echo "image_name_latest=$imageName:latest" >> $GITHUB_ENV
 
       - name: Set immutable image tag
