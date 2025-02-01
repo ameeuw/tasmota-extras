@@ -50,4 +50,4 @@ docker run -it --rm \
 -u $UID \
 -e HOME=/tmp \
 -e PROJECT_NAME=$NAME \
-esp-idf-berry
+ameeuw/ulp2berry

@@ -90,7 +90,7 @@ function processULPFiles(directoryPath) {
   let sFileContent = null;
   let mapFileContent = null;
   const readTemplate = process.argv.includes("-r");
-  const saveTemplate = process.argv.includes("-s");
+  const writeTemplate = process.argv.includes("-w");
   const verbose = process.argv.includes("-v");
   const projectName = process.env.PROJECT_NAME || path.basename(directoryPath);
   if (files.includes("sdkconfig")) {
@@ -171,7 +171,7 @@ function processULPFiles(directoryPath) {
               .join("\n")
         );
       }
-      if (saveTemplate) {
+      if (writeTemplate) {
         storeBerryFile(directoryPath, generatedBerryFile, projectName);
       }
     }

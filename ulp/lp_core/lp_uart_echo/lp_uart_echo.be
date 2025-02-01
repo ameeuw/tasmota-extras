@@ -20,3 +20,4 @@ class LP_UART_ECHO
       ULP.run()
     end  
 end
+LP_UART_ECHO()
