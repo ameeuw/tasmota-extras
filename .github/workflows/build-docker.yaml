@@ -25,7 +25,7 @@ jobs:
     if: github.event_name != 'pull_request'
 
     env:
-      imageName: ameeuw/ulp
+      imageName: ameeuw/ulp2berry
 
     steps:
       - name: Checkout
@@ -61,7 +61,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./
-          file: ./ulp/Dockerfile
+          file: ./ulp/lp_core/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.image_name }},${{ env.image_name_latest }},${{ env.image_immutable_tag }}
