@@ -6,7 +6,7 @@ function parseMapFile(mapFileContent, buildTarget) {
   var symbols = "";
   var symbols_keyed = {};
   for (line of mapFileContent) {
-    if (line.includes("PROVIDE (ulp")) {
+    if (line.includes("PROVIDE (")) {
       let el = line.split("PROVIDE")[1];
       let prefix = el.replace(/[\(=]/g, "").split("0x")[0].trim();
       let suffix = el.replace(")", "").split("0x")[1];
@@ -15,34 +15,26 @@ function parseMapFile(mapFileContent, buildTarget) {
       if (suffix_int > 0x60000000) {
         address = (suffix_int - 0x50000000) / 4; // Does somebody have a link to the docs?
       }
-      symbols += "#" + el + " -> ULP.get_mem(" + address + ") \n";
-      if (!symbols_keyed[suffix]) {
-        symbols_keyed[suffix] = [];
+
+      if (suffix) {
+        if (!symbols_keyed[suffix]) {
+          symbols_keyed[suffix] = [];
+        }
+        symbols_keyed[suffix].push({
+          prefix,
+          suffix,
+          address,
+        });
       }
-      symbols_keyed[suffix].push({
-        prefix,
-        suffix,
-        address,
-      });
     }
     if (line.includes("ulp_riscv_run")) {
       type = "RISCV";
     }
   }
-  if (symbols.length != 0) {
-    return {
-      type,
-      symbols:
-        "# ULP type: " +
-        type +
-        "\n# Build target: " +
-        buildTarget +
-        "\n\n" +
-        symbols,
-      symbols_keyed,
-    };
-  }
-  return { type, symbols: "", symbols_keyed: {} };
+  return {
+    type,
+    symbols_keyed,
+  };
 }
 
 function parseBinSFile(sFileContent) {
