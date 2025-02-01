@@ -22,24 +22,24 @@ class lp_uart_print : Driver
 
     def read_iteration()
       import ULP
-      self.ulp_iteration = ULP.get_mem({{ulp_iteration}})
+      return ULP.get_mem({{ulp_iteration}})
     end
 
     def read_print_variable()
       import ULP
-      self.ulp_print_variable = ULP.get_mem({{ulp_print_variable}})
+      return ULP.get_mem({{ulp_print_variable}})
     end
 
     def set_print_variable(value)
       import ULP
-      ULP.set_mem({{ulp_print_variable}},value) #print_variable
+      ULP.set_mem({{ulp_print_variable}},value)
       return ULP.get_mem({{ulp_print_variable}})
     end
 
     #- trigger a read every second -#
     def every_second()
-      self.read_iteration()
-      self.read_print_variable()
+      self.ulp_iteration = self.read_iteration()
+      self.ulp_print_variable = self.read_print_variable()
     end
   
     #- display sensor value in the web UI -#
