@@ -92,7 +92,7 @@ function processULPFiles(directoryPath) {
   const readTemplate = process.argv.includes("-r");
   const saveTemplate = process.argv.includes("-s");
   const verbose = process.argv.includes("-v");
-  const projectName = path.basename(directoryPath);
+  const projectName = process.env.PROJECT_NAME || path.basename(directoryPath);
   if (files.includes("sdkconfig")) {
     console.log("Processing:", "sdkconfig");
     const sdkConfigFile = fs
