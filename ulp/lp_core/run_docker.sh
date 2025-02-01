@@ -11,7 +11,7 @@ while getopts ":hp:n:" opt; do
       echo "Usage: $0 [-h] [-p project_dir] [-n name]"
       echo "Options:"
       echo "  -h            Show this help message"
-      echo "  -p directory  Set project directory (default: current directory)"
+      echo "  -d directory  Set project directory (default: current directory)"
       echo "  -n name       Set container name (default: top directory name)"
       exit 0
       ;;
