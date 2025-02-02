@@ -1,4 +1,6 @@
-class lp_uart_print : Driver
+var lp_uart_print = module('lp_uart_print')
+
+class lp_uart_print_class : Driver
     var ulp_sleep_time, ulp_iteration, ulp_print_variable
     
     def get_code()
@@ -63,16 +65,23 @@ class lp_uart_print : Driver
       tasmota.response_append(msg)
     end
 end
-lp_uart_print = lp_uart_print()
-tasmota.add_driver(lp_uart_print)
+lp_uart_print.lp_uart_print = lp_uart_print_class()
 
-def set_print_variable(cmd, idx, payload, payload_json)
-  import ULP
-  import string
-  var result
-  if payload != ""
-      result = lp_uart_print.set_print_variable(int(payload))
+
+if tasmota
+  var lp_uart_print_instance = lp_uart_print_class()
+  tasmota.add_driver(lp_uart_print_instance)
+
+  def set_print_variable(cmd, idx, payload, payload_json)
+    import ULP
+    import string
+    var result
+    if payload != ""
+        result = lp_uart_print_instance.set_print_variable(int(payload))
+    end
+    tasmota.resp_cmnd(string.format('{"print variable":%i}', result))
   end
-  tasmota.resp_cmnd(string.format('{"print variable":%i}', result))
+  tasmota.add_cmd('lp_uart_print_variable', set_print_variable)
 end
-tasmota.add_cmd('lp_uart_print_variable', set_print_variable)
+
+return lp_uart_print
