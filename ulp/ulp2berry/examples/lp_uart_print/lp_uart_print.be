@@ -8,7 +8,7 @@ class lp_uart_print_class : Driver
     end
   
     def init()
-      self.ulp_sleep_time = 1000 * 1000
+      self.ulp_sleep_time = 5 * 1000 * 1000
       import ULP
       ULP.uart_init(4,5,9600,serial.SERIAL_8N1)
       self.init_ulp()
@@ -69,15 +69,14 @@ lp_uart_print.lp_uart_print = lp_uart_print_class()
 
 
 if tasmota
-  var lp_uart_print_instance = lp_uart_print_class()
-  tasmota.add_driver(lp_uart_print_instance)
+  tasmota.add_driver(lp_uart_print.lp_uart_print)
 
   def set_print_variable(cmd, idx, payload, payload_json)
     import ULP
     import string
     var result
     if payload != ""
-        result = lp_uart_print_instance.set_print_variable(int(payload))
+        result = lp_uart_print.lp_uart_print.set_print_variable(int(payload))
     end
     tasmota.resp_cmnd(string.format('{"print variable":%i}', result))
   end
