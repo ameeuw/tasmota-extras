@@ -15,7 +15,6 @@ set(ulp_app_name lp_core_${COMPONENT_NAME})
 #    which should not be added to COMPONENT_SRCS.
 set(ulp_lp_core_sources 
     "lp_core/main.c"
-    "lp_core/lib/lib_src.c"
     "lp_core/lib/sml.c"
 )
 

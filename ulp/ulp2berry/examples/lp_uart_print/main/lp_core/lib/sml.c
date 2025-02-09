@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <string.h>
 
 #include "sml.h"
@@ -21,17 +20,19 @@ char logBuff[200];
   } while (0)
 #elif ARDUINO
 #include <Arduino.h>
+void Serial_print(const char *str);
+void Serial_println(const char *str);
 #define SML_LOG(...)               \
   do                               \
   {                                \
     sprintf(logBuff, __VA_ARGS__); \
-    Serial.print(logBuff);         \
+    Serial_print(logBuff);         \
   } while (0)
 #define SML_TREELOG(level, ...)    \
   do                               \
   {                                \
     sprintf(logBuff, __VA_ARGS__); \
-    Serial.print(logBuff);         \
+    Serial_print(logBuff);         \
   } while (0)
 #endif
 
@@ -204,6 +205,7 @@ void checkMagicByte(unsigned char byte)
   else if (byte == 0x1B && currentLevel == 0)
   {
     /* end sequence */
+    SML_LOG("Found start of end sequence\n");
     setState(SML_END, 3);
   }
   else
@@ -262,6 +264,7 @@ sml_states_t smlState(unsigned char currentByte)
     }
     if (len == 0)
     {
+      SML_LOG("End sequence complete, moving to checksum\n");
       setState(SML_CHECKSUM, 4);
     }
     break;
@@ -336,6 +339,21 @@ sml_states_t smlState(unsigned char currentByte)
 
 bool smlOBISCheck(const unsigned char *obis)
 {
+#ifdef SML_DEBUG
+  SML_LOG("Comparing OBIS: ");
+  for (int i = 0; i < 6; i++)
+  {
+    SML_LOG("%02X ", obis[i]);
+  }
+  SML_LOG(" with buffer: ");
+  for (int i = 0; i < 6; i++)
+  {
+    SML_LOG("%02X ", listBuffer[i + 2]);
+  }
+  SML_LOG("\n");
+#endif
+
+  // Compare the actual values
   return (memcmp(obis, &listBuffer[2], 6) == 0);
 }
 
@@ -358,29 +376,31 @@ void smlOBISManufacturer(unsigned char *str, int maxSize)
   }
 }
 
-void smlPow(double val, signed char scaler)
+double smlPow(long long int val, signed char scaler)
 {
+  double result = val;
   if (scaler < 0)
   {
     while (scaler++)
     {
-      val /= 10;
+      result /= 10;
     }
   }
   else
   {
     while (scaler--)
     {
-      val *= 10;
+      result *= 10;
     }
   }
+  return result;
 }
 
-void smlOBISByUnit(long long int val, signed char scaler, sml_units_t unit)
+long long int smlOBISByUnit(signed char *scaler, sml_units_t unit)
 {
   unsigned char i = 0, pos = 0, size = 0, y = 0, skip = 0;
   sml_states_t type;
-  val = -1; /* unknown or error */
+  long long int val = -1; /* unknown or error */
   while (i < listPos)
   {
     pos++;
@@ -402,11 +422,11 @@ void smlOBISByUnit(long long int val, signed char scaler, sml_units_t unit)
     if (pos == 4 && listBuffer[i] != unit)
     {
       /* return unknown (-1) if unit does not match */
-      return;
+      return -1;
     }
     if (pos == 5)
     {
-      scaler = listBuffer[i];
+      *scaler = listBuffer[i];
     }
     if (pos == 6)
     {
@@ -422,52 +442,53 @@ void smlOBISByUnit(long long int val, signed char scaler, sml_units_t unit)
     }
     i += size;
   }
+  return val;
 }
 
-void smlOBISWh(double wh)
-{
-  long long int val;
-  smlOBISByUnit(val, sc, SML_WATT_HOUR);
-  wh = val;
-  smlPow(wh, sc);
-}
+// void smlOBISWh(double *wh)
+// {
+//   long long int val;
+//   smlOBISByUnit(&val, sc, SML_WATT_HOUR);
+//   *wh = val;
+//   smlPow(wh, sc);
+// }
 
-void smlOBISW(double w)
-{
-  long long int val;
-  smlOBISByUnit(val, sc, SML_WATT);
-  w = val;
-  smlPow(w, sc);
-}
+// void smlOBISW(double w)
+// {
+//   long long int val;
+//   smlOBISByUnit(val, sc, SML_WATT);
+//   w = val;
+//   smlPow(w, sc);
+// }
 
-void smlOBISVolt(double v)
-{
-  long long int val;
-  smlOBISByUnit(val, sc, SML_VOLT);
-  v = val;
-  smlPow(v, sc);
-}
+// void smlOBISVolt(double v)
+// {
+//   long long int val;
+//   smlOBISByUnit(val, sc, SML_VOLT);
+//   v = val;
+//   smlPow(v, sc);
+// }
 
-void smlOBISAmpere(double a)
-{
-  long long int val;
-  smlOBISByUnit(val, sc, SML_AMPERE);
-  a = val;
-  smlPow(a, sc);
-}
+// void smlOBISAmpere(double a)
+// {
+//   long long int val;
+//   smlOBISByUnit(val, sc, SML_AMPERE);
+//   a = val;
+//   smlPow(a, sc);
+// }
 
-void smlOBISHertz(double h)
-{
-  long long int val;
-  smlOBISByUnit(val, sc, SML_HERTZ);
-  h = val;
-  smlPow(h, sc);
-}
+// void smlOBISHertz(double h)
+// {
+//   long long int val;
+//   smlOBISByUnit(val, sc, SML_HERTZ);
+//   h = val;
+//   smlPow(h, sc);
+// }
 
-void smlOBISDegree(double d)
-{
-  long long int val;
-  smlOBISByUnit(val, sc, SML_DEGREE);
-  d = val;
-  smlPow(d, sc);
-}
+// void smlOBISDegree(double d)
+// {
+//   long long int val;
+//   smlOBISByUnit(val, sc, SML_DEGREE);
+//   d = val;
+//   smlPow(d, sc);
+// }
