@@ -77,7 +77,7 @@ class lp_uart_print_class : Driver
                "{s}iteration{m}%i{e}"..
                "{s}state{m}%i{e}"..
                "{s}byte{m}%i{e}"..
-               "{s}t1wh{m}%f{e}"..
+               "{s}t1wh{m}%i{e}"..
                "{s}print_variable{m}%i{e}",
                self.ulp_iteration,
                self.ulp_sml_state,

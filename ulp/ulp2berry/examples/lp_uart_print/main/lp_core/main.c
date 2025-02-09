@@ -16,7 +16,8 @@ uint32_t print_variable = 1337;
 // long long int value = -1337;
 unsigned char sml_byte = 0xa7;
 const unsigned char obis[6] = {0x01, 0x00, 0x01, 0x08, 0x01, 0xff};
-double sml_t1wh = -2;
+double sml_t1wh_tmp = -2;
+long long int sml_t1wh = -1337;
 
 #define LP_UART_PORT_NUM LP_UART_NUM_0
 
@@ -41,7 +42,7 @@ int main(void)
         {
             // lp_core_printf("SML_START\n");
             /* reset local vars */
-            sml_t1wh = -3;
+            sml_t1wh_tmp = -3;
         }
         if (sml_state == SML_LISTEND)
         {
@@ -57,7 +58,8 @@ int main(void)
                 if (value != -1)
                 {
                     // lp_core_printf("Value: %lld\n", value);
-                    sml_t1wh = smlPow(value, scaler);
+                    sml_t1wh_tmp = smlPow(value, scaler);
+                    sml_t1wh = value;
                 }
             }
         }
@@ -67,12 +69,12 @@ int main(void)
         }
         if (sml_state == SML_FINAL)
         {
+            // sml_t1wh = sml_t1wh_tmp;
             // lp_core_printf("SML_FINAL\n");
             // lp_core_printf("Power T1    (1-0:1.8.1)..: ");
             // lp_core_printf("%f", sml_t1wh);
             // lp_core_printf("\n");
         }
-        sml_byte = -1;
     }
 
     return 0;
