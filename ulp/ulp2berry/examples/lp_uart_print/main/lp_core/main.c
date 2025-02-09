@@ -18,6 +18,7 @@ unsigned char sml_byte = 0xa7;
 const unsigned char obis[6] = {0x01, 0x00, 0x01, 0x08, 0x01, 0xff};
 double sml_t1wh_tmp = -2;
 long long int sml_t1wh = -1337;
+int sml_scaler;
 
 #define LP_UART_PORT_NUM LP_UART_NUM_0
 
@@ -60,6 +61,7 @@ int main(void)
                     // lp_core_printf("Value: %lld\n", value);
                     sml_t1wh_tmp = smlPow(value, scaler);
                     sml_t1wh = value;
+                    sml_scaler = scaler;
                 }
             }
         }

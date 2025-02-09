@@ -1,7 +1,7 @@
 var lp_uart_print = module('lp_uart_print')
 
 class lp_uart_print_class : Driver
-    var ulp_sleep_time, ulp_iteration, ulp_sml_state, ulp_print_variable, ulp_sml_byte, ulp_sml_t1wh
+    var ulp_sleep_time, ulp_iteration, ulp_sml_state, ulp_print_variable, ulp_sml_byte, ulp_sml_t1wh, ulp_sml_scaler
     
     def get_code()
       return bytes().fromb64("{{code_b64}}")
@@ -47,6 +47,11 @@ class lp_uart_print_class : Driver
       return ULP.get_mem({{ulp_sml_t1wh}})
     end
 
+    def read_scaler()
+      import ULP
+      return ULP.get_mem({{ulp_sml_scaler}})
+    end
+
     def set_print_variable(value)
       import ULP
       ULP.set_mem({{ulp_print_variable}},value)
@@ -66,6 +71,7 @@ class lp_uart_print_class : Driver
       self.ulp_sml_state = self.read_state()
       self.ulp_sml_byte = self.read_byte()
       self.ulp_sml_t1wh = self.read_t1wh()
+      self.ulp_sml_scaler = self.read_scaler()
     end
   
     #- display sensor value in the web UI -#
@@ -78,11 +84,13 @@ class lp_uart_print_class : Driver
                "{s}state{m}%i{e}"..
                "{s}byte{m}%i{e}"..
                "{s}t1wh{m}%i{e}"..
+               "{s}scaler{m}%i{e}"..
                "{s}print_variable{m}%i{e}",
                self.ulp_iteration,
                self.ulp_sml_state,
                self.ulp_sml_byte,
                self.ulp_sml_t1wh,
+               self.ulp_sml_scaler,
                self.ulp_print_variable)
       tasmota.web_send_decimal(msg)
     end
