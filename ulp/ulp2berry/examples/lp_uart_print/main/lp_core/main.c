@@ -10,23 +10,24 @@
 #include "sml.h"
 #include "ehz_bin.h"
 
-sml_states_t sml_state;
 uint32_t iteration = 0;
 uint32_t print_variable = 1337;
-// long long int value = -1337;
-unsigned char sml_byte = 0xa7;
-const unsigned char obis[6] = {0x01, 0x00, 0x01, 0x08, 0x01, 0xff};
-double sml_t1wh_tmp = -2;
-long long int sml_t1wh = -1337;
-int sml_scaler;
+
+const unsigned char obisT1wh[6] = {0x01, 0x00, 0x01, 0x08, 0x01, 0xff};
+long long int sml_t1wh;
+int sml_t1wh_scaler;
+
+const unsigned char obisSumwh[6] = {0x01, 0x00, 0x01, 0x08, 0x00, 0xff};
+long long int sml_sumwh;
+int sml_sumwh_scaler;
 
 #define LP_UART_PORT_NUM LP_UART_NUM_0
 
 int main(void)
 {
+    sml_states_t sml_state;
 
-    // uint8_t sml_byte = 0x1b;
-    // setState(SML_START, 4);
+    uint8_t sml_byte = 0x1b;
 
     iteration++;
     print_variable++;
@@ -43,15 +44,15 @@ int main(void)
         {
             // lp_core_printf("SML_START\n");
             /* reset local vars */
-            sml_t1wh_tmp = -3;
+            sml_t1wh = -3;
+            sml_sumwh = -3;
         }
         if (sml_state == SML_LISTEND)
         {
             // lp_core_printf("SML_LISTEND\n");
-
-            const bool isMatch = smlOBISCheck(obis);
             // lp_core_printf("OBIS check\n");
-            if (isMatch)
+
+            if (smlOBISCheck(obisT1wh))
             {
                 // lp_core_printf("Match - Processing value\n");
                 signed char scaler;
@@ -59,9 +60,23 @@ int main(void)
                 if (value != -1)
                 {
                     // lp_core_printf("Value: %lld\n", value);
-                    sml_t1wh_tmp = smlPow(value, scaler);
+                    // sml_t1wh_tmp = smlPow(value, scaler);
                     sml_t1wh = value;
-                    sml_scaler = scaler;
+                    sml_t1wh_scaler = scaler;
+                }
+            }
+
+            if (smlOBISCheck(obisSumwh))
+            {
+                // lp_core_printf("Match - Processing value\n");
+                signed char scaler;
+                long long int value = smlOBISByUnit(&scaler, SML_WATT_HOUR);
+                if (value != -1)
+                {
+                    // lp_core_printf("Value: %lld\n", value);
+                    // sml_t1wh_tmp = smlPow(value, scaler);
+                    sml_sumwh = value;
+                    sml_sumwh_scaler = scaler;
                 }
             }
         }
