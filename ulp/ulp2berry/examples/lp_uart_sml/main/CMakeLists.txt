@@ -1,5 +1,5 @@
 # Register the component
-idf_component_register(SRCS "lp_uart_main.c"
+idf_component_register(SRCS "lp_uart_sml_main.c"
                        WHOLE_ARCHIVE
                        REQUIRES ulp)
 
@@ -24,7 +24,7 @@ set(ulp_lp_core_includes "${CMAKE_CURRENT_SOURCE_DIR}/lp_core/lib")
 #
 # 3. List all the component source files which include automatically
 #    generated LP Core export file, ${ulp_app_name}.h:
-set(ulp_exp_dep_srcs "lp_uart_main.c")
+set(ulp_exp_dep_srcs "lp_uart_sml_main.c")
 
 #
 # 4. Call function to build ULP binary and embed in project using the argument
