@@ -5,32 +5,23 @@
  */
 
 #include <stdint.h>
-#include "ulp_lp_core_print.h"
 #include "ulp_lp_core_utils.h"
 
 uint32_t iteration = 0;
-volatile uint32_t print_variable = 1337;
-volatile float float_variable = 1.23456789;
-volatile int int_variable = -123456789;
-volatile unsigned int uint_variable = 123456789;
-volatile bool bool_variable = true;
-volatile char string_variable[] = "Hello, World! This could probably be longer - depending on the amount of ram we are planning to eat up here.";
+volatile float float_var = 1.23456789;
+volatile int32_t int_var = -123456789;
+volatile uint32_t uint_var = 123456789;
+volatile bool bool_var = true;
+volatile char string_var[] = "Hello, World! This could probably be longer. \nDepending on the amount of ram we are planning to eat up here.";
 
 int main(void)
 {
-    uint32_t print_variable_local = print_variable;
-    // print_variable_local++;
-    float float_variable_local = float_variable;
-    // float_variable_local++;
-    int int_variable_local = int_variable;
-    // int_variable_local++;
-    unsigned int uint_variable_local = uint_variable;
-    // uint_variable_local++;
-    bool bool_variable_local = bool_variable;
-    // bool_variable_local = !bool_variable_local;
-    char string_variable_local = string_variable[0];
-
     iteration++;
 
+    float float_var_local = float_var;
+    int int_var_local = int_var;
+    unsigned int uint_var_local = uint_var;
+    bool bool_var_local = bool_var;
+    char string_var_local = string_var[0];
     return 0;
 }

@@ -3,13 +3,12 @@ var lp_vars = module('lp_vars')
 class lp_vars_class : Driver
     var ulp_sleep_time
     var ulp_iteration
-    var ulp_print_variable
-    var ulp_float_variable
-    var ulp_double_variable
-    var ulp_int_variable
-    var ulp_uint_variable
-    var ulp_bool_variable
-    var ulp_string_variable
+    var ulp_float
+    var ulp_double
+    var ulp_int
+    var ulp_uint
+    var ulp_bool
+    var ulp_string
     
     def get_code()
       return bytes().fromb64("{{code_b64}}")
@@ -30,63 +29,87 @@ class lp_vars_class : Driver
       ULP.run()
     end  
 
-    def read_iteration()
+    def get_iteration()
       import ULP
       return ULP.get_mem({{ulp_iteration}})
     end
 
-    def read_print_variable()
-      import ULP
-      return ULP.get_mem({{ulp_print_variable}})
-    end
-
-    def read_float_variable()
+    def get_float()
       import ULP
       var float_bytes = bytes(-4)
-      float_bytes.seti(0,ULP.get_mem({{ulp_float_variable}}),4)
+      float_bytes.seti(0,ULP.get_mem({{ulp_float_var}}),4)
       return float_bytes.getfloat(0)
     end
 
-    def read_int_variable()
+    def set_float(value)
       import ULP
-      return ULP.get_mem({{ulp_int_variable}})
+      var float_bytes = bytes(-4)
+      float_bytes.setfloat(0,value)
+      ULP.set_mem({{ulp_float_var}},float_bytes.geti(0,4))
+      return self.get_float()
+    end
+
+    def get_int()
+      import ULP
+      return ULP.get_mem({{ulp_int_var}})
+    end
+
+    def set_int(value)
+      import ULP
+      ULP.set_mem({{ulp_int_var}},value)
+      return self.get_int()
     end
     
-    def read_uint_variable()
+    def get_uint()
       import ULP
-      return ULP.get_mem({{ulp_uint_variable}})
+      return ULP.get_mem({{ulp_uint_var}})
     end
 
-    def read_bool_variable()
+    def set_uint(value)
       import ULP
-      return ULP.get_mem({{ulp_bool_variable}}) == 1 ? true : false
+      ULP.set_mem({{ulp_uint_var}},value)
+      return self.get_uint()
     end
 
-    def read_string_variable()
+    def get_bool()
       import ULP
-      var length = {{ulp_string_variable_length}}
+      return ULP.get_mem({{ulp_bool_var}}) == 1 ? true : false
+    end
+
+    def set_bool(value)
+      import ULP
+      ULP.set_mem({{ulp_bool_var}},value ? 1 : 0)
+      return self.get_bool()
+    end
+
+    def get_string()
+      import ULP
+      var length = {{ulp_string_var_length}}
       var char_bytes = bytes(-4 * (length+1))
       for i:0..length
-        char_bytes.seti(i * 4,ULP.get_mem({{ulp_string_variable}}+i), 4)
+        char_bytes.seti(i * 4,ULP.get_mem({{ulp_string_var}}+i), 4)
       end
       return char_bytes.asstring()
     end
 
-    def set_print_variable(value)
+    def set_string(value)
       import ULP
-      ULP.set_mem({{ulp_print_variable}},value)
-      return ULP.get_mem({{ulp_print_variable}})
+      var length = {{ulp_string_var_length}}
+      var char_bytes = bytes().fromstring(value)
+      for i:0..length
+        ULP.set_mem({{ulp_string_var}}+i,char_bytes.geti(i * 4,4))
+      end
+      return self.get_string()
     end
 
     #- trigger a read every second -#
     def every_second()
-      self.ulp_iteration = self.read_iteration()
-      self.ulp_print_variable = self.read_print_variable()
-      self.ulp_float_variable = self.read_float_variable()
-      self.ulp_int_variable = self.read_int_variable()
-      self.ulp_uint_variable = self.read_uint_variable()
-      self.ulp_bool_variable = self.read_bool_variable()
-      self.ulp_string_variable = self.read_string_variable()
+      self.ulp_iteration = self.get_iteration()
+      self.ulp_float = self.get_float()
+      self.ulp_int = self.get_int()
+      self.ulp_uint = self.get_uint()
+      self.ulp_bool = self.get_bool()
+      self.ulp_string = self.get_string()
     end
   
     #- display sensor value in the web UI -#
@@ -96,19 +119,17 @@ class lp_vars_class : Driver
                "{s}<hr>{m}<hr>{e}"
                "{s}ULP Variable{m}value:{e}"
                "{s}iteration{m}%i{e}"..
-               "{s}print_variable{m}%i{e}"..
-               "{s}float_variable{m}%f{e}"..
-               "{s}int_variable{m}%i{e}"..
-               "{s}uint_variable{m}%u{e}"..
-               "{s}bool_variable{m}%s{e}"..
-               "{s}string_variable{m}%s{e}",
+               "{s}float{m}%f{e}"..
+               "{s}int{m}%i{e}"..
+               "{s}uint{m}%u{e}"..
+               "{s}bool{m}%s{e}"..
+               "{s}string{m}%s{e}",
                self.ulp_iteration,
-               self.ulp_print_variable,
-               self.ulp_float_variable,
-               self.ulp_int_variable,
-               self.ulp_uint_variable,
-               self.ulp_bool_variable,
-               self.ulp_string_variable)
+               self.ulp_float,
+               self.ulp_int,
+               self.ulp_uint,
+               self.ulp_bool,
+               self.ulp_string)
       tasmota.web_send_decimal(msg)
     end
 end
@@ -116,19 +137,62 @@ lp_vars.lp_vars = lp_vars_class()
 
 
 if tasmota
-  var lp_vars_instance = lp_vars_class()
-  tasmota.add_driver(lp_vars_instance)
+  tasmota.add_driver(lp_vars.lp_vars)
 
-  def set_print_variable(cmd, idx, payload, payload_json)
+  def set_float(cmd, idx, payload, payload_json)
     import ULP
     import string
     var result
     if payload != ""
-        result = lp_vars_instance.set_print_variable(int(payload))
+        result = lp_vars.lp_vars.set_float(real(payload))
     end
-    tasmota.resp_cmnd(string.format('{"print variable":%i}', result))
+    tasmota.resp_cmnd(string.format('{"float variable":%f}', result))
   end
-  tasmota.add_cmd('lp_vars_variable', set_print_variable)
+  tasmota.add_cmd('set_float', set_float)
+
+  def set_int(cmd, idx, payload, payload_json)
+    import ULP
+    import string
+    var result
+    if payload != ""
+        result = lp_vars.lp_vars.set_int(number(payload))
+    end
+    tasmota.resp_cmnd(string.format('{"int variable":%i}', result))
+  end
+  tasmota.add_cmd('set_int', set_int)
+
+  def set_uint(cmd, idx, payload, payload_json)
+    import ULP
+    import string
+    var result
+    if payload != ""
+        result = lp_vars.lp_vars.set_uint(number(payload))
+    end
+    tasmota.resp_cmnd(string.format('{"uint variable":%u}', result))
+  end
+  tasmota.add_cmd('set_uint', set_uint)
+
+  def set_bool(cmd, idx, payload, payload_json)
+    import ULP
+    import string
+    var result
+    if payload != ""
+        result = lp_vars.lp_vars.set_bool(payload == "true" || payload == "1")
+    end
+    tasmota.resp_cmnd(string.format('{"bool variable":%s}', result))
+  end
+  tasmota.add_cmd('set_bool', set_bool)
+
+  def set_string(cmd, idx, payload, payload_json)
+    import ULP
+    import string
+    var result
+    if payload != ""
+        result = lp_vars.lp_vars.set_string(payload)
+    end
+    tasmota.resp_cmnd(string.format('{"string variable":%s}', result))
+  end
+  tasmota.add_cmd('set_string', set_string)
 end
 
 return lp_vars
