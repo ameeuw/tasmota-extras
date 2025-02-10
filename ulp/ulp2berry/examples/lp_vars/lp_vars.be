@@ -64,8 +64,7 @@ class lp_vars_class : Driver
 
     def read_string_variable()
       import ULP
-      # var length = {{ulp_string_variable_length}}
-      var length = 27
+      var length = {{ulp_string_variable_length}}
       var char_bytes = bytes(-4 * (length+1))
       for i:0..length
         char_bytes.seti(i * 4,ULP.get_mem({{ulp_string_variable}}+i), 4)
