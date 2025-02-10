@@ -376,9 +376,9 @@ void smlOBISManufacturer(unsigned char *str, int maxSize)
   }
 }
 
-double smlPow(long long int val, signed char scaler)
+float smlPow(int64_t val, signed char scaler)
 {
-  double result = val;
+  float result = val;
   if (scaler < 0)
   {
     while (scaler++)
@@ -396,11 +396,11 @@ double smlPow(long long int val, signed char scaler)
   return result;
 }
 
-long long int smlOBISByUnit(signed char *scaler, sml_units_t unit)
+int64_t smlOBISByUnit(signed char *scaler, sml_units_t unit)
 {
   unsigned char i = 0, pos = 0, size = 0, y = 0, skip = 0;
   sml_states_t type;
-  long long int val = -1; /* unknown or error */
+  int64_t val = -1; /* unknown or error */
   while (i < listPos)
   {
     pos++;
@@ -445,50 +445,32 @@ long long int smlOBISByUnit(signed char *scaler, sml_units_t unit)
   return val;
 }
 
-// void smlOBISWh(double *wh)
-// {
-//   long long int val;
-//   smlOBISByUnit(&val, sc, SML_WATT_HOUR);
-//   *wh = val;
-//   smlPow(wh, sc);
-// }
+void smlOBISWh(float *wh)
+{
+  *wh = smlPow(smlOBISByUnit(&sc, SML_WATT_HOUR), sc);
+}
 
-// void smlOBISW(double w)
-// {
-//   long long int val;
-//   smlOBISByUnit(val, sc, SML_WATT);
-//   w = val;
-//   smlPow(w, sc);
-// }
+void smlOBISW(float *w)
+{
+  *w = smlPow(smlOBISByUnit(&sc, SML_WATT), sc);
+}
 
-// void smlOBISVolt(double v)
-// {
-//   long long int val;
-//   smlOBISByUnit(val, sc, SML_VOLT);
-//   v = val;
-//   smlPow(v, sc);
-// }
+void smlOBISVolt(float *v)
+{
+  *v = smlPow(smlOBISByUnit(&sc, SML_VOLT), sc);
+}
 
-// void smlOBISAmpere(double a)
-// {
-//   long long int val;
-//   smlOBISByUnit(val, sc, SML_AMPERE);
-//   a = val;
-//   smlPow(a, sc);
-// }
+void smlOBISAmpere(float *a)
+{
+  *a = smlPow(smlOBISByUnit(&sc, SML_AMPERE), sc);
+}
 
-// void smlOBISHertz(double h)
-// {
-//   long long int val;
-//   smlOBISByUnit(val, sc, SML_HERTZ);
-//   h = val;
-//   smlPow(h, sc);
-// }
+void smlOBISHertz(float *h)
+{
+  *h = smlPow(smlOBISByUnit(&sc, SML_HERTZ), sc);
+}
 
-// void smlOBISDegree(double d)
-// {
-//   long long int val;
-//   smlOBISByUnit(val, sc, SML_DEGREE);
-//   d = val;
-//   smlPow(d, sc);
-// }
+void smlOBISDegree(float *d)
+{
+  *d = smlPow(smlOBISByUnit(&sc, SML_DEGREE), sc);
+}

@@ -150,24 +150,24 @@ extern "C"
    *
    * \return nothing, but set \p val to -1 in case of an error.
    */
-  long long int smlOBISByUnit(signed char *scaler, sml_units_t unit);
+  int64_t smlOBISByUnit(signed char *scaler, sml_units_t unit);
   void setState(sml_states_t state, int byteLen);
-  double smlPow(long long int val, signed char scaler);
+  float smlPow(int64_t val, signed char scaler);
 
   // Be aware that double on Arduino UNO is just 32 bit
 
   /*! Convenience function to get a reading in Watt hours.*/
-  // void smlOBISWh(double *wh);
-  // /*! Convenience function to get a reading in Watts.*/
-  // void smlOBISW(double w);
-  // /*! Convenience function to get a reading in Volts.*/
-  // void smlOBISVolt(double v);
-  // /*! Convenience function to get a reading in Amperes.*/
-  // void smlOBISAmpere(double a);
-  // /*! Convenience function to get a reading in Hertz.*/
-  // void smlOBISHertz(double h);
-  // /*! Convenience function to get a reading in Degrees.*/
-  // void smlOBISDegree(double d);
+  void smlOBISWh(float *wh);
+  /*! Convenience function to get a reading in Watts.*/
+  void smlOBISW(float *w);
+  /*! Convenience function to get a reading in Volts.*/
+  void smlOBISVolt(float *v);
+  /*! Convenience function to get a reading in Amperes.*/
+  void smlOBISAmpere(float *a);
+  /*! Convenience function to get a reading in Hertz.*/
+  void smlOBISHertz(float *h);
+  /*! Convenience function to get a reading in Degrees.*/
+  void smlOBISDegree(float *d);
 
 #ifdef __cplusplus
 }
