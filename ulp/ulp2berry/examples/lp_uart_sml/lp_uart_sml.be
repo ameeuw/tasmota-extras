@@ -24,7 +24,26 @@ class lp_uart_sml_class : Driver
       var c = self.get_code()
       ULP.load(c)
       ULP.run()
-    end  
+    end
+
+    def get_obis_configs()
+      import ULP
+      var length = {{ulp_obis_configs_length}}
+      var obis_configs = bytes(-4 * (length+1))
+      for i:0..length
+        obis_configs.seti(i * 4,ULP.get_mem({{ulp_obis_configs}}+i),4)
+      end
+      var obis_configs_list = []
+      for i:0..(length/2)
+        var obis_config = {}
+        var currentAddress = i*8;
+        obis_config["obis"] = obis_configs[(currentAddress)..(currentAddress+5)].tohex()
+        obis_config["unit"] = obis_configs.geti(currentAddress+6,1)
+        obis_config["scaler"] = obis_configs.geti(currentAddress+7,1)
+        obis_configs_list.push(obis_config)
+      end
+      return obis_configs_list
+    end
 
     def get_iteration()
       import ULP

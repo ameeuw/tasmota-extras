@@ -445,6 +445,11 @@ int64_t smlOBISByUnit(signed char *scaler, sml_units_t unit)
   return val;
 }
 
+void smlOBISUnit(float *val, sml_units_t unit)
+{
+  *val = smlPow(smlOBISByUnit(&sc, unit), sc);
+}
+
 void smlOBISWh(float *wh)
 {
   *wh = smlPow(smlOBISByUnit(&sc, SML_WATT_HOUR), sc);

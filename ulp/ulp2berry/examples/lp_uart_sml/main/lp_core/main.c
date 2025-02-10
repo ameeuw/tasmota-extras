@@ -23,6 +23,13 @@ typedef struct
     void (*Handler)();
 } OBISHandler;
 
+typedef struct
+{
+    const unsigned char OBIS[6];
+    uint8_t unit;
+    int8_t scaler;
+} MeterConfig;
+
 void PowerT1() { smlOBISWh(&sml_t1wh); }
 void PowerSum() { smlOBISWh(&sml_sumwh); }
 
@@ -31,11 +38,15 @@ OBISHandler OBISHandlers[] = {
     {{0x01, 0x00, 0x01, 0x08, 0x00, 0xff}, &PowerSum}, /*   1-  0:  1.  8.0*255 (T1 + T2) */
     {{0, 0}}};
 
+volatile MeterConfig obis_configs[10] = {
+    {{0x01, 0x00, 0x01, 0x08, 0x01, 0xff}, SML_WATT_HOUR, 1},
+    {{0x01, 0x00, 0x01, 0x08, 0x00, 0xff}, SML_WATT_HOUR, 1},
+};
+
 #define LP_UART_PORT_NUM LP_UART_NUM_0
 
 int main(void)
 {
-    blubb = 1;
     sml_states_t sml_state;
 
     uint8_t sml_byte;
@@ -43,6 +54,7 @@ int main(void)
 
     iteration++;
     (void)print_variable;
+    (void)obis_configs[0].unit;
 
     /* Read data from the LP_UART */
     // while (lp_core_uart_read_bytes(LP_UART_PORT_NUM, &sml_byte, 1, 10) == 1)

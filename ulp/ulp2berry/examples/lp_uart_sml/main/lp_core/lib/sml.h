@@ -150,9 +150,10 @@ extern "C"
    *
    * \return nothing, but set \p val to -1 in case of an error.
    */
-  int64_t smlOBISByUnit(signed char *scaler, sml_units_t unit);
-  void setState(sml_states_t state, int byteLen);
-  float smlPow(int64_t val, signed char scaler);
+  // int64_t smlOBISByUnit(signed char *scaler, sml_units_t unit);
+  // void setState(sml_states_t state, int byteLen);
+  // float smlPow(int64_t val, signed char scaler);
+  void smlOBISUnit(float *val, sml_units_t unit);
 
   // Be aware that double on Arduino UNO is just 32 bit
 
