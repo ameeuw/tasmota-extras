@@ -15,33 +15,19 @@ volatile uint32_t print_variable = 1337;
 
 uint32_t sml_unexpected_count = 0;
 
-float sml_t1wh;
-float sml_sumwh;
 typedef struct
 {
-    const unsigned char OBIS[6];
-    void (*Handler)();
-} OBISHandler;
-
-typedef struct
-{
-    const unsigned char OBIS[6];
+    unsigned char OBIS[6];
     uint8_t unit;
     int8_t scaler;
 } MeterConfig;
 
-void PowerT1() { smlOBISWh(&sml_t1wh); }
-void PowerSum() { smlOBISWh(&sml_sumwh); }
-
-OBISHandler OBISHandlers[] = {
-    {{0x01, 0x00, 0x01, 0x08, 0x01, 0xff}, &PowerT1},  /*   1-  0:  1.  8.1*255 (T1) */
-    {{0x01, 0x00, 0x01, 0x08, 0x00, 0xff}, &PowerSum}, /*   1-  0:  1.  8.0*255 (T1 + T2) */
-    {{0, 0}}};
-
-volatile MeterConfig obis_configs[10] = {
+MeterConfig obis_configs[10] = {
     {{0x01, 0x00, 0x01, 0x08, 0x01, 0xff}, SML_WATT_HOUR, 1},
     {{0x01, 0x00, 0x01, 0x08, 0x00, 0xff}, SML_WATT_HOUR, 1},
 };
+
+float obis_values[10];
 
 #define LP_UART_PORT_NUM LP_UART_NUM_0
 
@@ -55,7 +41,7 @@ int main(void)
     iteration++;
     (void)print_variable;
     (void)obis_configs[0].unit;
-
+    (void)obis_values[0];
     /* Read data from the LP_UART */
     // while (lp_core_uart_read_bytes(LP_UART_PORT_NUM, &sml_byte, 1, 10) == 1)
     for (uint16_t i = 0; i < ehz_bin_len; i++)
@@ -64,19 +50,16 @@ int main(void)
         sml_state = smlState(sml_byte);
         if (sml_state == SML_START)
         {
-            /* reset local vars */
-            sml_t1wh = -3;
-            sml_sumwh = -3;
         }
         if (sml_state == SML_LISTEND)
         {
-            for (iHandler = 0; OBISHandlers[iHandler].Handler != 0 &&
-                               !(smlOBISCheck(OBISHandlers[iHandler].OBIS));
+            for (iHandler = 0; obis_configs[iHandler].unit != 0 &&
+                               !(smlOBISCheck(obis_configs[iHandler].OBIS));
                  iHandler++)
                 ;
-            if (OBISHandlers[iHandler].Handler != 0)
+            if (obis_configs[iHandler].unit != 0)
             {
-                OBISHandlers[iHandler].Handler();
+                smlOBISUnit(&obis_values[iHandler], obis_configs[iHandler].unit);
             }
         }
         if (sml_state == SML_UNEXPECTED)

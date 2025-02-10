@@ -2,10 +2,6 @@ var lp_uart_sml = module('lp_uart_sml')
 
 class lp_uart_sml_class : Driver
     var ulp_sleep_time
-    var ulp_iteration
-    var ulp_print_variable
-    var ulp_sml_t1wh
-    var ulp_sml_sumwh
     
     def get_code()
       return bytes().fromb64("{{code_b64}}")
@@ -36,13 +32,40 @@ class lp_uart_sml_class : Driver
       var obis_configs_list = []
       for i:0..(length/2)
         var obis_config = {}
-        var currentAddress = i*8;
-        obis_config["obis"] = obis_configs[(currentAddress)..(currentAddress+5)].tohex()
-        obis_config["unit"] = obis_configs.geti(currentAddress+6,1)
-        obis_config["scaler"] = obis_configs.geti(currentAddress+7,1)
+        var currentPosition = i*8;
+        obis_config["obis"] = obis_configs[(currentPosition)..(currentPosition+5)].tohex()
+        obis_config["unit"] = obis_configs.geti(currentPosition+6,1)
+        obis_config["scaler"] = obis_configs.geti(currentPosition+7,1)
         obis_configs_list.push(obis_config)
       end
       return obis_configs_list
+    end
+
+    def get_obis_config(index)
+      import ULP
+      var obis_config_bytes = bytes(-8)
+      obis_config_bytes.seti(0,ULP.get_mem({{ulp_obis_configs}}+index*2),4)
+      obis_config_bytes.seti(4,ULP.get_mem({{ulp_obis_configs}}+index*2+1),4)
+      var obis_config = {}
+      var currentPosition = 0;
+      obis_config["obis"] = obis_config_bytes[(currentPosition)..(currentPosition+5)].tohex()
+      obis_config["unit"] = obis_config_bytes.geti(currentPosition+6,1)
+      obis_config["scaler"] = obis_config_bytes.geti(currentPosition+7,1)
+      return obis_config
+    end
+
+    def set_obis_config(index, obis, unit, scaler)
+      import ULP
+      var obis_config = bytes(obis)
+      var unit_bytes = bytes(-1)
+      unit_bytes.seti(0,unit,1)
+      obis_config = obis_config + unit_bytes
+      var scaler_bytes = bytes(-1)
+      scaler_bytes.seti(0,scaler,1)
+      obis_config = obis_config + scaler_bytes
+      ULP.set_mem({{ulp_obis_configs}}+index*2,obis_config[0..3].geti(0,4))
+      ULP.set_mem({{ulp_obis_configs}}+index*2+1,obis_config[4..7].geti(0,4))
+      return self.get_obis_config(index)
     end
 
     def get_iteration()
@@ -50,18 +73,13 @@ class lp_uart_sml_class : Driver
       return ULP.get_mem({{ulp_iteration}})
     end
 
-    def get_t1wh()
-      return self.get_float({{ulp_sml_t1wh}})
-    end
-
-    def get_sumwh()
-      return self.get_float({{ulp_sml_sumwh}})
-    end
-
-    def get_float(address)
+    def get_float(address, index)
+      if index == nil
+        index = 0
+      end
       import ULP
       var float_bytes = bytes(-4)
-      float_bytes.seti(0,ULP.get_mem(address),4)
+      float_bytes.seti(0,ULP.get_mem(address+index),4)
       return float_bytes.getfloat(0)
     end
 
@@ -71,6 +89,10 @@ class lp_uart_sml_class : Driver
       float_bytes.setfloat(0,value)
       ULP.set_mem(address,float_bytes.geti(0,4))
       return self.get_float(address)
+    end
+
+    def get_obis_value(index)
+      return self.get_float({{ulp_obis_values}},index)
     end
 
     def get_print_variable()
@@ -86,10 +108,6 @@ class lp_uart_sml_class : Driver
 
     #- trigger a read every second -#
     def every_second()
-      self.ulp_iteration = self.get_iteration()
-      self.ulp_print_variable = self.get_print_variable()
-      self.ulp_sml_t1wh = self.get_t1wh()
-      self.ulp_sml_sumwh = self.get_sumwh()
     end
   
     #- display sensor value in the web UI -#
@@ -99,13 +117,13 @@ class lp_uart_sml_class : Driver
                "{s}<hr>{m}<hr>{e}"
                "{s}ULP Variable{m}value:{e}"
                "{s}iteration{m}%i{e}"..
-               "{s}t1wh{m}%f{e}"..
-               "{s}sumwh{m}%f{e}"..
+               "{s}obis_values[0]{m}%f{e}"..
+               "{s}obis_values[1]{m}%f{e}"..
                "{s}print_variable{m}%i{e}",
-               self.ulp_iteration,
-               self.ulp_sml_t1wh,
-               self.ulp_sml_sumwh,
-               self.ulp_print_variable)
+               self.get_iteration(),
+               self.get_obis_value(0),
+               self.get_obis_value(1),
+               self.get_print_variable())
       tasmota.web_send_decimal(msg)
     end
   
@@ -113,7 +131,7 @@ class lp_uart_sml_class : Driver
     def json_append()
       import string
       var msg = string.format(",\"ULP\":{\"iteration\":%i}",
-                                   self.ulp_iteration)
+                                   self.get_iteration())
       tasmota.response_append(msg)
     end
 end

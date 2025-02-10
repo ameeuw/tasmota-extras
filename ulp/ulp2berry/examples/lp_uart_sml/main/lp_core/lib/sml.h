@@ -132,7 +132,7 @@ extern "C"
    reading in Wh (Watt hours) was received and we can then read it using \ref
    smlOBISWh.
    */
-  bool smlOBISCheck(const unsigned char *obis);
+  bool smlOBISCheck(unsigned char *obis);
 
   /*! Copy the first \p maxSize bytes of the name/identifier of the manufacturer
    * into buffer \p str. Use this after reading OBIS code `{0x81, 0x81, 0xc7,

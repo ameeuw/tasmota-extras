@@ -337,7 +337,7 @@ sml_states_t smlState(unsigned char currentByte)
   return currentState;
 }
 
-bool smlOBISCheck(const unsigned char *obis)
+bool smlOBISCheck(unsigned char *obis)
 {
 #ifdef SML_DEBUG
   SML_LOG("Comparing OBIS: ");
