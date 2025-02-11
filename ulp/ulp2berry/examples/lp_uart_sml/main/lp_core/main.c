@@ -12,6 +12,7 @@
 
 uint32_t iteration = 0;
 volatile uint32_t print_variable = 1337;
+volatile char string_var[1024];
 
 uint32_t sml_unexpected_count = 0;
 
@@ -37,38 +38,54 @@ int main(void)
 
     uint8_t sml_byte;
     uint8_t iHandler = 0;
+    uint8_t data[256] = {0};
+    int length = 0;
+    int pos = 0;
 
     iteration++;
     (void)print_variable;
+    (void)string_var;
     (void)obis_configs[0].unit;
     (void)obis_values[0];
     /* Read data from the LP_UART */
-    // while (lp_core_uart_read_bytes(LP_UART_PORT_NUM, &sml_byte, 1, 10) == 1)
-    for (uint16_t i = 0; i < ehz_bin_len; i++)
+    while (1)
     {
-        sml_byte = ehz_bin[i];
-        sml_state = smlState(sml_byte);
-        if (sml_state == SML_START)
+        length = lp_core_uart_read_bytes(LP_UART_PORT_NUM, data, (sizeof(data) - 1), 10);
+        if (length > 0)
         {
-        }
-        if (sml_state == SML_LISTEND)
-        {
-            for (iHandler = 0; obis_configs[iHandler].unit != 0 &&
-                               !(smlOBISCheck(obis_configs[iHandler].OBIS));
-                 iHandler++)
-                ;
-            if (obis_configs[iHandler].unit != 0)
+            for (uint16_t i = 0; i < length; i++)
             {
-                smlOBISUnit(&obis_values[iHandler], obis_configs[iHandler].unit);
+                string_var[pos] = data[i];
+                pos++;
+                if (pos >= sizeof(string_var))
+                {
+                    pos = 0;
+                }
+                sml_byte = data[i];
+                sml_state = smlState(sml_byte);
+                if (sml_state == SML_START)
+                {
+                }
+                if (sml_state == SML_LISTEND)
+                {
+                    for (iHandler = 0; obis_configs[iHandler].unit != 0 &&
+                                       !(smlOBISCheck(obis_configs[iHandler].OBIS));
+                         iHandler++)
+                        ;
+                    if (obis_configs[iHandler].unit != 0)
+                    {
+                        smlOBISUnit(&obis_values[iHandler], obis_configs[iHandler].unit);
+                    }
+                }
+                if (sml_state == SML_UNEXPECTED)
+                {
+                    sml_unexpected_count++;
+                }
+                if (sml_state == SML_FINAL)
+                {
+                    sml_unexpected_count = 0;
+                }
             }
-        }
-        if (sml_state == SML_UNEXPECTED)
-        {
-            sml_unexpected_count++;
-        }
-        if (sml_state == SML_FINAL)
-        {
-            sml_unexpected_count = 0;
         }
     }
 

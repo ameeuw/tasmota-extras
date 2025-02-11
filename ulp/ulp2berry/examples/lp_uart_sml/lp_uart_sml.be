@@ -2,6 +2,9 @@ var lp_uart_sml = module('lp_uart_sml')
 
 class lp_uart_sml_class : Driver
     var ulp_sleep_time
+    var ser
+    var ulp_string
+
     
     def get_code()
       return bytes().fromb64("{{code_b64}}")
@@ -11,6 +14,7 @@ class lp_uart_sml_class : Driver
       self.ulp_sleep_time = 5 * 1000 * 1000
       import ULP
       ULP.uart_init(4,5,9600,serial.SERIAL_8N1)
+      self.ser = serial(6,7, 9600, serial.SERIAL_8N1)
       self.init_ulp()
     end
   
@@ -20,6 +24,16 @@ class lp_uart_sml_class : Driver
       var c = self.get_code()
       ULP.load(c)
       ULP.run()
+    end
+
+    def get_string()
+      import ULP
+      var length = {{ulp_string_var_length}}
+      var char_bytes = bytes(-4 * (length+1))
+      for i:0..length
+        char_bytes.seti(i * 4,ULP.get_mem({{ulp_string_var}}+i), 4)
+      end
+      return char_bytes.asstring()
     end
 
     def get_obis_configs()
@@ -106,6 +120,15 @@ class lp_uart_sml_class : Driver
       return ULP.get_mem({{ulp_print_variable}})
     end
 
+    def send_uart_message(message)
+      self.ser.write(message)
+    end
+
+    def send_ehz_bin()
+      var ehz_bin =bytes("1b1b1b1b010101017607000c0408872d620062007263010176010107000c069e2d0f0b06454d4801001d4615ca0101632b8e007607000c0408872e620062007263070177010b06454d4801001d4615ca0172620165069efa837777078181c78203ff0101010104454d480177070100000009ff010101010b06454d4801001d4615ca0177070100010800ff63018201621e52ff5600000074ea0177070100010801ff0101621e52ff59000000000012d6870177070100010802ff0101621e52ff56000000000001770701000f0700ff0101621b52ff5500002f650177078181c78205ff010101018302ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01010163b93f007607000c0408873162006200726302017101636a5300001b1b1b1b1a01b69d")
+      self.send_uart_message(ehz_bin)
+    end
+
     #- trigger a read every second -#
     def every_second()
     end
@@ -119,11 +142,13 @@ class lp_uart_sml_class : Driver
                "{s}iteration{m}%i{e}"..
                "{s}obis_values[0]{m}%f{e}"..
                "{s}obis_values[1]{m}%f{e}"..
-               "{s}print_variable{m}%i{e}",
+               "{s}print_variable{m}%i{e}"..
+               "{s}string{m}%s{e}",
                self.get_iteration(),
                self.get_obis_value(0),
                self.get_obis_value(1),
-               self.get_print_variable())
+               self.get_print_variable(),
+               self.get_string())
       tasmota.web_send_decimal(msg)
     end
   
