@@ -75,11 +75,32 @@ function checkULPSDKConfig(file) {
   return null;
 }
 
+function parseCoreMainHFile(fileContent) {
+  const vars =
+    fileContent
+      .match(/extern uint32_t (ulp_\w+)(?:\[(\d+)\])?;/g)
+      ?.reduce((acc, line) => {
+        const [_, name, len] = line.match(/(ulp_\w+)(?:\[(\d+)\])?;/);
+        const type = name.match(/ulp_(int|float|string|bool)_/)
+          ? name.match(/ulp_(int|float|string|bool)_/)[1]
+          : "unknown";
+        return {
+          ...acc,
+          [name]: {
+            type,
+            length: len ? parseInt(len) : 1,
+          },
+        };
+      }, {}) || {};
+  return vars;
+}
+
 function processULPFiles(directoryPath) {
   const files = fs.readdirSync(directoryPath);
   let buildTarget = null;
   let sFileContent = null;
   let mapFileContent = null;
+  let lpCoreMainHContent = null;
   if (files.includes("sdkconfig")) {
     console.log("Processing:", "sdkconfig");
     const sdkConfigFile = fs
@@ -105,6 +126,19 @@ function processULPFiles(directoryPath) {
           .split(/\r\n|\n/);
       }
     });
+
+    const lpCoreMainHPath = path.join(
+      directoryPath,
+      "build",
+      "esp-idf",
+      "main",
+      "lp_core_main",
+      "lp_core_main.h"
+    );
+    if (fs.existsSync(lpCoreMainHPath)) {
+      console.log("Processing:", "lp_core_main.h");
+      lpCoreMainHContent = fs.readFileSync(lpCoreMainHPath, "utf8");
+    }
   } else {
     console.error("No build folder found");
     return;
@@ -113,11 +147,13 @@ function processULPFiles(directoryPath) {
   if (sFileContent && mapFileContent) {
     const mapResult = parseMapFile(mapFileContent, buildTarget);
     const binaryResult = parseBinSFile(sFileContent);
+    const mainHResult = parseCoreMainHFile(lpCoreMainHContent);
 
     return {
       mapResult,
       binaryResult,
       buildTarget,
+      mainHResult,
     };
   }
 }
@@ -127,7 +163,7 @@ function getAndStoreBerryFile(directoryPath) {
   const readTemplate = process.argv.includes("-r");
   const writeTemplate = process.argv.includes("-w");
   const verbose = process.argv.includes("-v");
-  const { mapResult, binaryResult, buildTarget } =
+  const { mapResult, binaryResult, buildTarget, mainHResult } =
     processULPFiles(directoryPath);
   console.log("\nResults:\n");
 
@@ -164,6 +200,7 @@ function getAndStoreBerryFile(directoryPath) {
   const generatedBerryFile = generateBerryFile(
     mapResult,
     binaryResult,
+    mainHResult,
     template
   );
 
@@ -202,7 +239,7 @@ function getBerryTemplateFile(directoryPath) {
   return null;
 }
 
-function generateBerryFile(mapResult, binaryResult, template) {
+function generateBerryFile(mapResult, binaryResult, mainHResult, template) {
   if (!mapResult || !binaryResult || !template) return;
 
   template = template.replace("{{code_b64}}", binaryResult.binary64);
@@ -222,6 +259,17 @@ function generateBerryFile(mapResult, binaryResult, template) {
     );
   });
 
+  const lengthMappings = Object.entries(mainHResult).map(([key, value]) => {
+    return {
+      symbol: `${key}_length`,
+      length: value.length,
+    };
+  });
+
+  lengthMappings.forEach((v) => {
+    template = template.replace(new RegExp(`{{${v.symbol}}}`, "g"), v.length);
+  });
+
   return template;
 }
 
@@ -238,7 +286,7 @@ function storeBerryFile(directoryPath, berryFileContent, projectName) {
 }
 
 function processBerryFiles(directoryPath) {
-  const { mapResult, binaryResult, buildTarget } =
+  const { mapResult, binaryResult, buildTarget, mainHResult } =
     processULPFiles(directoryPath);
   const files = fs.readdirSync(directoryPath);
   const readTemplate = process.argv.includes("-r");
