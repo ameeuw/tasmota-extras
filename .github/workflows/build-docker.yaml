@@ -25,7 +25,7 @@ jobs:
     if: github.event_name != 'pull_request'
 
     env:
-      imageName: ameeuw/ulp
+      imageName: ameeuw/ulp2berry
 
     steps:
       - name: Checkout
@@ -39,7 +39,6 @@ jobs:
         run: echo "image_name=$imageName:${{ github.event.release.name }}" >> $GITHUB_ENV
 
       - name: Set "latest" tag for each branch
-        if: ${{ github.event_name != 'release' }}
         run: echo "image_name_latest=$imageName:latest" >> $GITHUB_ENV
 
       - name: Set immutable image tag
@@ -60,8 +59,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: ./
-          file: ./ulp/Dockerfile
+          context: ./ulp/ulp2berry
+          file: ./ulp/ulp2berry/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.image_name }},${{ env.image_name_latest }},${{ env.image_immutable_tag }}
