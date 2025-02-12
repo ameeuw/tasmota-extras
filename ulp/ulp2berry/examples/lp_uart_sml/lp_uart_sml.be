@@ -1,27 +1,48 @@
 var lp_uart_sml = module('lp_uart_sml')
 
-class lp_uart_sml_class : Driver
+class ulp_class : Driver
     var ulp_sleep_time
-    var ser
     
     def get_code()
       return bytes().fromb64("{{code_b64}}")
     end
   
-    def init()
-      self.ulp_sleep_time = 5 * 1000 * 1000
-      import ULP
-      ULP.uart_init(4,5,9600,serial.SERIAL_8N1)
-      self.ser = serial(6,7, 9600, serial.SERIAL_8N1)
-      self.init_ulp()
-    end
-  
     def init_ulp()
+      self.ulp_sleep_time = 5 * 1000 * 1000
       import ULP
       ULP.wake_period(0,self.ulp_sleep_time)
       var c = self.get_code()
       ULP.load(c)
       ULP.run()
+    end
+
+    def get_float(address, index)
+      if index == nil
+        index = 0
+      end
+      import ULP
+      var float_bytes = bytes(-4)
+      float_bytes.seti(0,ULP.get_mem(address+index),4)
+      return float_bytes.getfloat(0)
+    end
+
+    def set_float(address, value)
+      import ULP
+      var float_bytes = bytes(-4)
+      float_bytes.setfloat(0,value)
+      ULP.set_mem(address,float_bytes.geti(0,4))
+      return self.get_float(address)
+    end
+end
+
+class lp_uart_sml_class : ulp_class
+    var ser
+
+    def init()
+      import ULP
+      ULP.uart_init(4,5,9600,serial.SERIAL_8N1)
+      self.ser = serial(6,7, 9600, serial.SERIAL_8N1)
+      self.init_ulp()
     end
 
     def get_obis_configs()
@@ -64,24 +85,6 @@ class lp_uart_sml_class : Driver
     def get_iteration()
       import ULP
       return ULP.get_mem({{ulp_iteration}})
-    end
-
-    def get_float(address, index)
-      if index == nil
-        index = 0
-      end
-      import ULP
-      var float_bytes = bytes(-4)
-      float_bytes.seti(0,ULP.get_mem(address+index),4)
-      return float_bytes.getfloat(0)
-    end
-
-    def set_float(address, value)
-      import ULP
-      var float_bytes = bytes(-4)
-      float_bytes.setfloat(0,value)
-      ULP.set_mem(address,float_bytes.geti(0,4))
-      return self.get_float(address)
     end
 
     def get_obis_value(index)
@@ -225,5 +228,7 @@ if tasmota
   tasmota.add_cmd('set_obis_config', set_obis_config)
 
 end
+
+lp_uart_sml.lp_uart_sml.send_ehz_bin()
 
 return lp_uart_sml
