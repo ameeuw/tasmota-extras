@@ -3,8 +3,6 @@ var lp_uart_sml = module('lp_uart_sml')
 class lp_uart_sml_class : Driver
     var ulp_sleep_time
     var ser
-    var ulp_string
-
     
     def get_code()
       return bytes().fromb64("{{code_b64}}")
@@ -24,16 +22,6 @@ class lp_uart_sml_class : Driver
       var c = self.get_code()
       ULP.load(c)
       ULP.run()
-    end
-
-    def get_string()
-      import ULP
-      var length = {{ulp_string_var_length}}
-      var char_bytes = bytes(-4 * (length+1))
-      for i:0..length
-        char_bytes.seti(i * 4,ULP.get_mem({{ulp_string_var}}+i), 4)
-      end
-      return char_bytes.asstring()
     end
 
     def get_obis_configs()
@@ -142,13 +130,11 @@ class lp_uart_sml_class : Driver
                "{s}iteration{m}%i{e}"..
                "{s}obis_values[0]{m}%f{e}"..
                "{s}obis_values[1]{m}%f{e}"..
-               "{s}print_variable{m}%i{e}"..
-               "{s}string{m}%s{e}",
+               "{s}print_variable{m}%i{e}",
                self.get_iteration(),
                self.get_obis_value(0),
                self.get_obis_value(1),
-               self.get_print_variable(),
-               self.get_string())
+               self.get_print_variable())
       tasmota.web_send_decimal(msg)
     end
   

@@ -8,11 +8,9 @@
 #include "ulp_lp_core_utils.h"
 #include "ulp_lp_core_uart.h"
 #include "sml.h"
-#include "ehz_bin.h"
 
 uint32_t iteration = 0;
 volatile uint32_t print_variable = 1337;
-volatile char string_var[1024];
 
 uint32_t sml_unexpected_count = 0;
 
@@ -36,15 +34,12 @@ int main(void)
 {
     sml_states_t sml_state;
 
-    uint8_t sml_byte;
-    uint8_t iHandler = 0;
+    uint8_t config_index = 0;
     uint8_t data[256] = {0};
     int length = 0;
-    int pos = 0;
 
     iteration++;
     (void)print_variable;
-    (void)string_var;
     (void)obis_configs[0].unit;
     (void)obis_values[0];
     /* Read data from the LP_UART */
@@ -55,26 +50,19 @@ int main(void)
         {
             for (uint16_t i = 0; i < length; i++)
             {
-                string_var[pos] = data[i];
-                pos++;
-                if (pos >= sizeof(string_var))
-                {
-                    pos = 0;
-                }
-                sml_byte = data[i];
-                sml_state = smlState(sml_byte);
+                sml_state = smlState(data[i]);
                 if (sml_state == SML_START)
                 {
                 }
                 if (sml_state == SML_LISTEND)
                 {
-                    for (iHandler = 0; obis_configs[iHandler].unit != 0 &&
-                                       !(smlOBISCheck(obis_configs[iHandler].OBIS));
-                         iHandler++)
+                    for (config_index = 0; obis_configs[config_index].unit != 0 &&
+                                           !(smlOBISCheck(obis_configs[config_index].OBIS));
+                         config_index++)
                         ;
-                    if (obis_configs[iHandler].unit != 0)
+                    if (obis_configs[config_index].unit != 0)
                     {
-                        smlOBISUnit(&obis_values[iHandler], obis_configs[iHandler].unit);
+                        smlOBISUnit(&obis_values[config_index], obis_configs[config_index].unit);
                     }
                 }
                 if (sml_state == SML_UNEXPECTED)
