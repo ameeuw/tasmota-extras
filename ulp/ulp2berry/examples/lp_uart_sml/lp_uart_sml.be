@@ -25,20 +25,11 @@ class lp_uart_sml_class : Driver
     end
 
     def get_obis_configs()
-      import ULP
-      var length = {{ulp_obis_configs_length}}
-      var obis_configs = bytes(-4 * (length+1))
-      for i:0..length
-        obis_configs.seti(i * 4,ULP.get_mem({{ulp_obis_configs}}+i),4)
-      end
+      var obis_configs_length = {{ulp_obis_configs_length}}
+      var obis_config_size = 2
       var obis_configs_list = []
-      for i:0..(length/2)
-        var obis_config = {}
-        var currentPosition = i*8;
-        obis_config["obis"] = obis_configs[(currentPosition)..(currentPosition+5)].tohex()
-        obis_config["unit"] = obis_configs.geti(currentPosition+6,1)
-        obis_config["scaler"] = obis_configs.geti(currentPosition+7,1)
-        obis_configs_list.push(obis_config)
+      for i:0..((obis_configs_length/obis_config_size)-1)
+        obis_configs_list.push(self.get_obis_config(i))
       end
       return obis_configs_list
     end
@@ -97,6 +88,18 @@ class lp_uart_sml_class : Driver
       return self.get_float({{ulp_obis_values}},index)
     end
 
+    def get_obis_values()
+      var obis_configs_length = {{ulp_obis_configs_length}}
+      var obis_config_size = 2
+      var obis_values_list = []
+      for i:0..((obis_configs_length/obis_config_size)-1)
+        var obis_config = self.get_obis_config(i)
+        obis_config["value"] = self.get_obis_value(i)
+        obis_values_list.push(obis_config)
+      end
+      return obis_values_list
+    end
+
     def get_print_variable()
       import ULP
       return ULP.get_mem({{ulp_print_variable}})
@@ -153,15 +156,73 @@ if tasmota
   tasmota.add_driver(lp_uart_sml.lp_uart_sml)
 
   def set_print_variable(cmd, idx, payload, payload_json)
-    import ULP
     import string
     var result
     if payload != ""
-        result = lp_uart_sml.lp_uart_sml.set_print_variable(int(payload))
+      result = lp_uart_sml.lp_uart_sml.set_print_variable(int(payload))
     end
     tasmota.resp_cmnd(string.format('{"print variable":%i}', result))
   end
   tasmota.add_cmd('set_print_variable', set_print_variable)
+
+  def get_obis_value(cmd, idx, payload, payload_json)
+    import json
+    var result
+    if payload != ""
+        result = lp_uart_sml.lp_uart_sml.get_obis_value(int(payload))
+    end
+    tasmota.resp_cmnd(result)
+  end
+  tasmota.add_cmd('get_obis_value', get_obis_value)
+
+  def get_obis_values(cmd, idx, payload, payload_json)
+    import json
+    var result = lp_uart_sml.lp_uart_sml.get_obis_values()
+    tasmota.resp_cmnd(json.dump(result))
+  end
+  tasmota.add_cmd('get_obis_values', get_obis_values)
+
+  def get_obis_configs(cmd, idx, payload, payload_json)
+    import json
+    var result = lp_uart_sml.lp_uart_sml.get_obis_configs()
+    tasmota.resp_cmnd(json.dump(result))
+  end
+  tasmota.add_cmd('get_obis_configs', get_obis_configs)
+
+  def get_obis_config(cmd, idx, payload, payload_json)
+    import json
+    var result
+    if payload != ""
+        result = lp_uart_sml.lp_uart_sml.get_obis_config(int(payload))
+    end
+    tasmota.resp_cmnd(json.dump(result))
+  end
+  tasmota.add_cmd('get_obis_config', get_obis_config)
+
+  def set_obis_config(cmd, idx, payload, payload_json)
+    import json
+    import string
+    var result
+    if payload_json != nil
+      result = lp_uart_sml.lp_uart_sml.set_obis_config(
+        int(payload_json["index"]),
+        payload_json["obis"],
+        int(payload_json["unit"]),
+        int(payload_json["scaler"]))
+    else
+      if payload != ""
+        var payload_split = string.split(payload, ",")
+        result = lp_uart_sml.lp_uart_sml.set_obis_config(
+          int(payload_split[0]),
+          payload_split[1],
+          int(payload_split[2]),
+          int(payload_split[3]))
+      end
+    end
+
+    tasmota.resp_cmnd(json.dump(result))
+  end
+  tasmota.add_cmd('set_obis_config', set_obis_config)
 
 end
 
