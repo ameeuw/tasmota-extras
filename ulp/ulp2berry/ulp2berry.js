@@ -1,368 +1,436 @@
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
+const liquid = require("liquidjs");
 
-function parseMapFile(mapFileContent, buildTarget) {
-  var type = "FSM";
-  var symbols_keyed = {};
-  for (line of mapFileContent) {
-    if (line.match(/0x[0-9a-fA-F]+\s+ulp_/)) {
-      let [address, symbol] = line.trim().split(/\s+/);
-      let addressInt = parseInt(address.replace("0x", ""), 16);
-      let shifted = false;
-      if (addressInt > 0x50000000) {
-        addressInt = (addressInt - 0x50000000) / 4; // TODO: find docs for the address shift
-        shifted = true;
+class Args {
+  constructor(args = process.argv.slice(2)) {
+    this.args = args;
+    this.flags = new Set();
+    this.params = [];
+
+    this.parse();
+  }
+
+  parse() {
+    this.args.forEach((arg) => {
+      if (arg.startsWith("-")) {
+        this.flags.add(arg);
+      } else {
+        this.params.push(arg);
       }
-      if (!symbols_keyed[address]) {
-        symbols_keyed[address] = [];
-      }
-      symbols_keyed[address].push({
-        symbol,
-        address,
-        addressInt,
-        shifted,
-      });
-    }
-    if (line.includes("ulp_riscv_run")) {
-      type = "RISCV";
-    } else if (line.includes("ulp_lp_core_run")) {
-      type = "LP_CORE";
+    });
+  }
+
+  has(flag) {
+    return this.flags.has(flag);
+  }
+
+  getDirectory() {
+    return this.params[0];
+  }
+
+  validateInput() {
+    if (!this.getDirectory()) {
+      console.error("Error: Directory path is required");
+      this.showUsage();
+      process.exit(1);
     }
   }
-  return {
-    type,
-    symbols_keyed,
-  };
+
+  showUsage() {
+    console.log(`
+Usage: node ulp2berry.js [options] <directory>
+
+Options:
+  -t           Build TAPP package
+  -v           Show verbose output
+  -r           Read Berry template file
+  -w           Write template file
+  
+Example:
+  node ulp2berry.js -v ./my-project
+`);
+  }
 }
 
-function parseBinSFile(sFileContent) {
-  var binary = [];
-  var words;
-  for (line of sFileContent) {
-    if (line.startsWith(".byte")) {
-      tokens = line.split(" ");
-      for (token of tokens) {
-        if (token.startsWith("0x")) {
-          binary.push(parseInt(token.substring(2), 16));
-        }
-      }
-    }
-    if (line.startsWith(".word") || line.startsWith(".long")) {
-      words = parseInt(line.split(" ")[1]);
-    }
+class ULPProcessor {
+  constructor(directoryPath) {
+    this.directoryPath = directoryPath;
+    this.buildPath = path.join(directoryPath, "build");
   }
-  if (binary.length == words) {
-    var _b64 = "";
-    for (b of binary) {
-      _b64 += String.fromCharCode(b);
+
+  process() {
+    const buildTarget = this.getBuildTarget();
+    const { sFileContent, mapFileContent, lpCoreMainHContent } =
+      this.readBuildFiles();
+
+    if (!sFileContent || !mapFileContent) {
+      throw new Error("Required build files not found");
     }
+
     return {
-      length: words,
-      binary64: btoa(_b64),
+      mapResult: this.parseMapFile(mapFileContent),
+      binaryResult: this.parseBinSFile(sFileContent),
+      buildTarget,
+      mainHResult: this.parseCoreMainHFile(lpCoreMainHContent),
     };
   }
-  return null;
-}
 
-function checkULPSDKConfig(file) {
-  for (line of file) {
-    let tokens = line.split("=");
-    if (tokens[0] == "CONFIG_IDF_TARGET") {
-      return tokens[1].replace(/"/g, "");
+  getBuildTarget() {
+    const sdkConfigPath = path.join(this.directoryPath, "sdkconfig");
+    if (!fs.existsSync(sdkConfigPath)) {
+      return null;
     }
-  }
-  return null;
-}
 
-function parseCoreMainHFile(fileContent) {
-  const vars =
-    fileContent
-      .match(/extern uint32_t (ulp_\w+)(?:\[(\d+)\])?;/g)
-      ?.reduce((acc, line) => {
-        const [_, name, len] = line.match(/(ulp_\w+)(?:\[(\d+)\])?;/);
-        const type = name.match(/ulp_(int|float|string|bool)_/)
-          ? name.match(/ulp_(int|float|string|bool)_/)[1]
-          : "unknown";
-        return {
-          ...acc,
-          [name]: {
-            type,
-            length: len ? parseInt(len) : 1,
-          },
-        };
-      }, {}) || {};
-  return vars;
-}
-
-function processULPFiles(directoryPath) {
-  const files = fs.readdirSync(directoryPath);
-  let buildTarget = null;
-  let sFileContent = null;
-  let mapFileContent = null;
-  let lpCoreMainHContent = null;
-  if (files.includes("sdkconfig")) {
-    console.log("Processing:", "sdkconfig");
-    const sdkConfigFile = fs
-      .readFileSync(path.join(directoryPath, "sdkconfig"), "utf8")
-      .split(/\r\n|\n/);
-    buildTarget = checkULPSDKConfig(sdkConfigFile);
+    const content = fs.readFileSync(sdkConfigPath, "utf8").split(/\r\n|\n/);
+    return this.checkULPSDKConfig(content);
   }
 
-  if (files.includes("build")) {
-    const buildFiles = fs.readdirSync(path.join(directoryPath, "build"));
+  readBuildFiles() {
+    if (!fs.existsSync(this.buildPath)) {
+      throw new Error("No build folder found");
+    }
+
+    const buildFiles = fs.readdirSync(this.buildPath);
+    let sFileContent = null;
+    let mapFileContent = null;
+    let lpCoreMainHContent = null;
+
     buildFiles.forEach((file) => {
-      const buildFilePath = path.join(directoryPath, "build", file);
+      const filePath = path.join(this.buildPath, file);
       if (file.endsWith(".bin.S")) {
-        console.log("Processing:", file);
-        sFileContent = fs.readFileSync(buildFilePath, "utf8").split(/\r\n|\n/);
-      } else if (file.endsWith(".map")) {
-        if (file.includes("bootloader") || buildFilePath.includes("esp-idf")) {
-          return;
-        }
-        console.log("Processing:", file);
-        mapFileContent = fs
-          .readFileSync(buildFilePath, "utf8")
-          .split(/\r\n|\n/);
+        sFileContent = fs.readFileSync(filePath, "utf8").split(/\r\n|\n/);
+      } else if (file.endsWith(".map") && !file.includes("bootloader")) {
+        mapFileContent = fs.readFileSync(filePath, "utf8").split(/\r\n|\n/);
       }
     });
 
     const lpCoreMainHPath = path.join(
-      directoryPath,
-      "build",
+      this.buildPath,
       "esp-idf",
       "main",
       "lp_core_main",
       "lp_core_main.h"
     );
     if (fs.existsSync(lpCoreMainHPath)) {
-      console.log("Processing:", "lp_core_main.h");
       lpCoreMainHContent = fs.readFileSync(lpCoreMainHPath, "utf8");
     }
-  } else {
-    console.error("No build folder found");
-    return;
+
+    return { sFileContent, mapFileContent, lpCoreMainHContent };
   }
 
-  if (sFileContent && mapFileContent) {
-    const mapResult = parseMapFile(mapFileContent, buildTarget);
-    const binaryResult = parseBinSFile(sFileContent);
-    const mainHResult = parseCoreMainHFile(lpCoreMainHContent);
+  parseMapFile(mapFileContent) {
+    let type = "FSM";
+    const symbols_keyed = {};
 
-    return {
-      mapResult,
-      binaryResult,
-      buildTarget,
-      mainHResult,
-    };
+    for (const line of mapFileContent) {
+      if (line.match(/0x[0-9a-fA-F]+\s+ulp_/)) {
+        let [address, symbol] = line.trim().split(/\s+/);
+        let addressInt = parseInt(address.replace("0x", ""), 16);
+        let shifted = false;
+
+        if (addressInt > 0x50000000) {
+          addressInt = (addressInt - 0x50000000) / 4; // Word width. When getting address they jump one every 4 bytes
+          shifted = true;
+        }
+
+        if (!symbols_keyed[address]) {
+          symbols_keyed[address] = [];
+        }
+
+        symbols_keyed[address].push({
+          symbol,
+          address,
+          addressInt,
+          shifted,
+        });
+      }
+
+      if (line.includes("ulp_riscv_run")) {
+        type = "RISCV";
+      } else if (line.includes("ulp_lp_core_run")) {
+        type = "LP_CORE";
+      }
+    }
+
+    return { type, symbols_keyed };
+  }
+
+  parseBinSFile(sFileContent) {
+    const binary = [];
+    let words;
+
+    for (const line of sFileContent) {
+      if (line.startsWith(".byte")) {
+        const tokens = line.split(" ");
+        for (const token of tokens) {
+          if (token.startsWith("0x")) {
+            binary.push(parseInt(token.substring(2), 16));
+          }
+        }
+      }
+      if (line.startsWith(".word") || line.startsWith(".long")) {
+        words = parseInt(line.split(" ")[1]);
+      }
+    }
+
+    if (binary.length === words) {
+      let b64 = "";
+      for (const b of binary) {
+        b64 += String.fromCharCode(b);
+      }
+      return {
+        length: words,
+        binary64: Buffer.from(b64).toString("base64"),
+      };
+    }
+    return null;
+  }
+
+  checkULPSDKConfig(file) {
+    for (const line of file) {
+      const tokens = line.split("=");
+      if (tokens[0] === "CONFIG_IDF_TARGET") {
+        return tokens[1].replace(/"/g, "");
+      }
+    }
+    return null;
+  }
+
+  parseCoreMainHFile(fileContent) {
+    if (!fileContent) return {};
+
+    const vars =
+      fileContent
+        .match(/extern uint32_t (ulp_\w+)(?:\[(\d+)\])?;/g)
+        ?.reduce((acc, line) => {
+          const [_, name, len] = line.match(/(ulp_\w+)(?:\[(\d+)\])?;/);
+          const type = name.match(/ulp_(int|float|string|bool)_/)
+            ? name.match(/ulp_(int|float|string|bool)_/)[1]
+            : "unknown";
+          return {
+            ...acc,
+            [name]: {
+              type,
+              length: len ? parseInt(len) : 1,
+            },
+          };
+        }, {}) || {};
+
+    return vars;
   }
 }
 
-function getAndStoreBerryFile(directoryPath) {
-  const projectName = process.env.PROJECT_NAME || path.basename(directoryPath);
-  const readTemplate = process.argv.includes("-r");
-  const writeTemplate = process.argv.includes("-w");
-  const verbose = process.argv.includes("-v");
-  const { mapResult, binaryResult, buildTarget, mainHResult } =
-    processULPFiles(directoryPath);
-  console.log("\nResults:\n");
+class BerryGenerator {
+  constructor(projectName) {
+    this.projectName = projectName;
+    this.engine = liquid({
+      strict_filters: true,
+    });
+  }
 
-  console.log(
-    `Binary: "${mapResult.type}" type (${binaryResult.length} bytes)`
-  );
+  getDefaultTemplate() {
+    return [
+      "import ULP",
+      "ULP.wake_period(0,1000 * 1000) # timer register 0 - every 1000 millisecs",
+      'c = bytes().fromb64("{{code_b64}}")',
+      "ULP.load(c)",
+      "ULP.run()",
+    ].join("\n");
+  }
 
-  console.log("Symbol mappings:");
-  if (verbose) {
-    console.log(mapResult.symbols_keyed);
-  } else {
+  generateFile(ulpData, template = this.getDefaultTemplate(), verbose = false) {
+    const liquidTemplate = this.engine.parse(template);
+    const berryContent = this.generateContent(ulpData, template);
+
+    console.log("\nGenerated berry file.");
     console.log(
-      Object.values(mapResult.symbols_keyed)
-        .flat()
-        .filter((v) => {
-          return v.shifted;
-        })
+      "To make sure to copy the entire file, run the script with the -v flag.\n"
     );
-  }
 
-  let template = null;
-  if (readTemplate) {
-    template = getBerryTemplateFile(process.argv[2]);
-  } else {
-    template = "";
-    template += "import ULP \n";
-    template +=
-      "ULP.wake_period(0,1000 * 1000) # timer register 0 - every 1000 millisecs\n";
-    template += 'c = bytes().fromb64("{{code_b64}}") \n';
-    template += "ULP.load(c) \n";
-    template += "ULP.run() \n";
-  }
-
-  const generatedBerryFile = generateBerryFile(
-    mapResult,
-    binaryResult,
-    mainHResult,
-    template
-  );
-
-  console.log(
-    "\nGenerated berry file.\nTo make sure to copy the entire file, run the script with the -v flag.\n"
-  );
-  if (generatedBerryFile) {
     if (verbose) {
-      console.log(generatedBerryFile);
+      console.log(berryContent);
     } else {
-      console.log(
-        "! ALL LINES ARE CURTAILED TO 120 CHARACTERS ! \n!COPYING THIS CODE WILL MOST LIKELY NOT WORK!\n\n" +
-          generatedBerryFile
-            .split("\n")
-            .map((line) => line.slice(0, 120))
-            .join("\n")
+      this.printTruncated(berryContent);
+    }
+
+    return berryContent;
+  }
+
+  generateContent(ulpData, template) {
+    const { mapResult, binaryResult, mainHResult } = ulpData;
+
+    if (!mapResult || !binaryResult || !template) {
+      throw new Error("Missing required data for Berry file generation");
+    }
+
+    // Replace binary content
+    template = template.replace("{{code_b64}}", binaryResult.binary64);
+
+    // Replace symbol mappings
+    const parseableMappings = Object.values(mapResult.symbols_keyed)
+      .flat()
+      .filter((v) => v.shifted);
+
+    parseableMappings.forEach((v) => {
+      template = template.replace(
+        new RegExp(`{{${v.symbol}}}`, "g"),
+        v.addressInt
       );
-    }
-    if (writeTemplate) {
-      storeBerryFile(directoryPath, generatedBerryFile, projectName);
-    }
-  }
-}
-
-function getBerryTemplateFile(directoryPath) {
-  const files = fs.readdirSync(directoryPath);
-  if (files.find((file) => file.endsWith(".be"))) {
-    const berryFile = files.find((file) => file.endsWith(".be"));
-    console.log("Processing:", berryFile);
-    const berryFileContent = fs.readFileSync(
-      path.join(directoryPath, berryFile),
-      "utf8"
-    );
-    return berryFileContent;
-  }
-  return null;
-}
-
-function generateBerryFile(mapResult, binaryResult, mainHResult, template) {
-  if (!mapResult || !binaryResult || !template) return;
-
-  template = template.replace("{{code_b64}}", binaryResult.binary64);
-
-  // Filter by address: not sure about the shifting and dividing by 4 in the parseMapFile
-  // --> we filter by them being larger than 0x60000000
-  const parseableMappings = Object.values(mapResult.symbols_keyed)
-    .flat()
-    .filter((v) => {
-      return v.shifted;
     });
 
-  parseableMappings.forEach((v) => {
-    template = template.replace(
-      new RegExp(`{{${v.symbol}}}`, "g"),
-      v.addressInt
-    );
-  });
-
-  const lengthMappings = Object.entries(mainHResult).map(([key, value]) => {
-    return {
+    // Replace length mappings
+    const lengthMappings = Object.entries(mainHResult).map(([key, value]) => ({
       symbol: `${key}_length`,
       length: value.length,
-    };
-  });
+    }));
 
-  lengthMappings.forEach((v) => {
-    template = template.replace(new RegExp(`{{${v.symbol}}}`, "g"), v.length);
-  });
+    lengthMappings.forEach((v) => {
+      template = template.replace(new RegExp(`{{${v.symbol}}}`, "g"), v.length);
+    });
 
-  return template;
-}
+    // Check for text and replace it with the symbol
 
-function storeBerryFile(directoryPath, berryFileContent, projectName) {
-  const files = fs.readdirSync(directoryPath);
-  if (files.includes("build")) {
-    const buildFilePath = path.join(
-      directoryPath,
-      "build",
-      `${projectName}.be`
+    return template;
+  }
+
+  printTruncated(content) {
+    console.log(
+      "! ALL LINES ARE CURTAILED TO 120 CHARACTERS !\n" +
+        "!COPYING THIS CODE WILL MOST LIKELY NOT WORK!\n\n" +
+        content
+          .split("\n")
+          .map((line) => line.slice(0, 120))
+          .join("\n")
     );
-    fs.writeFileSync(buildFilePath, berryFileContent);
   }
 }
 
-function processBerryFiles(directoryPath) {
-  const { mapResult, binaryResult, buildTarget, mainHResult } =
-    processULPFiles(directoryPath);
-  const files = fs.readdirSync(directoryPath);
-  const readTemplate = process.argv.includes("-r");
-  const writeTemplate = process.argv.includes("-w");
-  const verbose = process.argv.includes("-v");
-  const projectName = process.env.PROJECT_NAME || path.basename(directoryPath);
+class TAppBuilder {
+  constructor(projectName) {
+    this.projectName = projectName;
+  }
 
-  console.log("Build target:", buildTarget);
-  console.log("ULP architecture:", mapResult.type);
-  console.log("Binary size:", binaryResult.length);
+  build(directoryPath, ulpData) {
+    const buildPath = path.join(directoryPath, "build");
+    const { mapResult, buildTarget } = ulpData;
 
-  let template = null;
-  if (readTemplate) {
-    template = getBerryTemplateFile(process.argv[2]);
-  } else {
-    template = `print("target: {{BUILD_TARGET}}")
-print("ULP architecture: {{ULP_ARCH}}")
+    try {
+      // Read the Berry file
+      const berryFileContent = fs.readFileSync(
+        path.join(buildPath, `${this.projectName}.be`),
+        "utf8"
+      );
+
+      // Create template
+      const template = this.createTAppTemplate(buildTarget, mapResult.type);
+
+      // Create TAPP structure
+      const tappPath = path.join(buildPath, `${this.projectName}-tapp`);
+      if (fs.existsSync(tappPath)) {
+        fs.rmSync(tappPath, { recursive: true });
+      }
+
+      // Create directory and write files
+      fs.mkdirSync(tappPath);
+      fs.writeFileSync(
+        path.join(tappPath, `${this.projectName}.be`),
+        berryFileContent
+      );
+      fs.writeFileSync(path.join(tappPath, "autoexec.be"), template);
+
+      // Create ZIP archive
+      const tappFile = path.join(
+        buildPath,
+        `${this.projectName}-${buildTarget}-${mapResult.type}.tapp`
+      );
+      execSync(`zip -0 -j "${tappFile}" "${tappPath}"/*`);
+    } catch (error) {
+      throw new Error(
+        `Error building TAPP: ${error.message}\n` +
+          `To build a Tasmota App for a ULP module there needs to be a build folder with ${this.projectName}.be`
+      );
+    }
+  }
+
+  createTAppTemplate(buildTarget, ulpArch) {
+    return `print("target: ${buildTarget}")
+print("ULP architecture: ${ulpArch}")
 var app
 var wd = tasmota.wd
 import sys
 if size(wd) sys.path().push(wd) end
-print("{{PROJECT_NAME}}/autoexec.be")
+print("${this.projectName}/autoexec.be")
 print(wd)
-import {{PROJECT_NAME}}
+import ${this.projectName}
 if size(wd) sys.path().pop() end`;
   }
+}
 
-  const parseableMappings = [
-    { prefix: "PROJECT_NAME", value: projectName },
-    { prefix: "BUILD_TARGET", value: buildTarget },
-    { prefix: "ULP_ARCH", value: mapResult.type },
-  ];
-  parseableMappings.forEach((v) => {
-    template = template.replace(new RegExp(`{{${v.prefix}}}`, "g"), v.value);
-  });
+class App {
+  constructor() {
+    this.args = new Args();
+    this.args.validateInput();
 
-  if (files.includes("build")) {
+    const directoryPath = this.args.getDirectory();
+    this.projectName = process.env.PROJECT_NAME || path.basename(directoryPath);
+
+    this.processor = new ULPProcessor(directoryPath);
+    this.generator = new BerryGenerator(this.projectName);
+    this.tappBuilder = new TAppBuilder(this.projectName);
+  }
+
+  run() {
     try {
-      const buildPath = path.join(directoryPath, "build");
-      const berryFileContent = fs.readFileSync(
-        path.join(buildPath, `${projectName}.be`),
-        "utf8"
-      );
+      const ulpData = this.processor.process();
 
-      if (writeTemplate) {
-        const tappPath = path.join(buildPath, `${projectName}-tapp`);
-        if (fs.existsSync(tappPath)) {
-          fs.rmSync(tappPath, { recursive: true });
+      if (this.args.has("-t")) {
+        this.tappBuilder.build(this.args.getDirectory(), ulpData);
+      } else {
+        console.log(ulpData);
+        const template = this.args.has("-r")
+          ? this.readBerryTemplate(this.args.getDirectory())
+          : this.generator.getDefaultTemplate();
+
+        const berryContent = this.generator.generateFile(
+          ulpData,
+          template,
+          this.args.has("-v")
+        );
+
+        if (this.args.has("-w")) {
+          this.writeBerryFile(this.args.getDirectory(), berryContent);
         }
-
-        fs.mkdirSync(tappPath);
-        fs.writeFileSync(
-          path.join(tappPath, `${projectName}.be`),
-          berryFileContent
-        );
-        const tappFile = path.join(
-          buildPath,
-          `${projectName}-${buildTarget}-${mapResult.type}.tapp`
-        );
-        fs.writeFileSync(path.join(tappPath, `autoexec.be`), template);
-        execSync(`zip -0 -j "${tappFile}" "${tappPath}"/*`);
-        // fs.rmSync(tappPath, { recursive: true });
       }
-    } catch (e) {
-      console.error(
-        `Error reading berry file - to build a Tasmota App for a ulp module there needs to be a build folder with a <env.PROJECT_NAME>.be ("${projectName}.be")`
-      );
-      console.error(e);
+    } catch (error) {
+      console.error("Error:", error.message);
+      process.exit(1);
+    }
+  }
+
+  readBerryTemplate(directoryPath) {
+    const files = fs.readdirSync(directoryPath);
+    const berryFile = files.find((file) => file.endsWith(".be"));
+
+    if (berryFile) {
+      console.log("Processing:", berryFile);
+      return fs.readFileSync(path.join(directoryPath, berryFile), "utf8");
+    }
+
+    return null;
+  }
+
+  writeBerryFile(directoryPath, content) {
+    const buildPath = path.join(directoryPath, "build");
+    if (fs.existsSync(buildPath)) {
+      const filePath = path.join(buildPath, `${this.projectName}.be`);
+      fs.writeFileSync(filePath, content);
+      console.log(`Berry file written to: ${filePath}`);
     }
   }
 }
 
-const buildTapp = process.argv.includes("-t");
-
-if (buildTapp) {
-  processBerryFiles(process.argv[2]);
-} else {
-  getAndStoreBerryFile(process.argv[2]);
-}
+// Run the application
+const app = new App();
+app.run();

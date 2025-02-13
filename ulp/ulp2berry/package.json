@@ -1,0 +1,17 @@
+{
+  "name": "ulp2berry",
+  "version": "1.0.0",
+  "description": "A script to parse a build folder of a ulp (fsm, riscv, lp_core), create a collection of berry files, and pack them up in a tasmota app (.tapp) using liquidjs.",
+  "main": "ulp2berry.js",
+  "directories": {
+    "example": "examples"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Arne Meeuw",
+  "license": "ISC",
+  "dependencies": {
+    "liquidjs": "^10.20.3"
+  }
+}
