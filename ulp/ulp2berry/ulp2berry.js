@@ -261,26 +261,26 @@ class BerryGenerator {
       throw new Error("Missing required data for Berry file generation");
     }
 
-    /*
-
-    {
-     "symbols": {
-        binary: {
-        "base64": string,
-        "length": number
-        },
-        symbols: {
-          [symbol]: {
-            "type": "int" | "float" | "string" | "bool",
-            "length": number,
-            "address": string,
-          }
-        },
-        buildTarget: string,
-        type: "FSM" | "RISCV" | "LP_CORE",
-    }
-
-    */
+    console.log(`
+      ULP extracted payload structure:
+      =================================
+      {
+        "symbols": {
+          binary: {
+          "base64": string,
+          "length": number
+          },
+          symbols: {
+            [symbol]: {
+              "type": "int" | "float" | "string" | "bool",
+              "length": number,
+              "address": string,
+            }
+          },
+          buildTarget: string,
+          type: "FSM" | "RISCV" | "LP_CORE",
+      }
+      =================================`);
 
     // Transform the data into the required structure
     const transformedData = {
