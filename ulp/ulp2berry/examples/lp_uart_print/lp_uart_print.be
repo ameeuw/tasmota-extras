@@ -4,7 +4,7 @@ class lp_uart_print_class : Driver
     var ulp_sleep_time, ulp_iteration, ulp_print_variable
     
     def get_code()
-      return bytes().fromb64("{{code_b64}}")
+      return bytes().fromb64("{{binary.base64}}")
     end
   
     def init()
@@ -24,18 +24,18 @@ class lp_uart_print_class : Driver
 
     def read_iteration()
       import ULP
-      return ULP.get_mem({{ulp_iteration}})
+      return ULP.get_mem({{symbols.ulp_iteration.address}})
     end
 
     def read_print_variable()
       import ULP
-      return ULP.get_mem({{ulp_print_variable}})
+      return ULP.get_mem({{symbols.ulp_print_variable.address}})
     end
 
     def set_print_variable(value)
       import ULP
-      ULP.set_mem({{ulp_print_variable}},value)
-      return ULP.get_mem({{ulp_print_variable}})
+      ULP.set_mem({{symbols.ulp_print_variable.address}},value)
+      return ULP.get_mem({{symbols.ulp_print_variable.address }})
     end
 
     #- trigger a read every second -#

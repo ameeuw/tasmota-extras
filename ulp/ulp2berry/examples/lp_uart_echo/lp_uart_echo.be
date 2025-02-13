@@ -2,7 +2,7 @@ class LP_UART_ECHO
     var ulp_sleep_time
     
     def get_code()
-      return bytes().fromb64("{{code_b64}}")
+      return bytes().fromb64("{{binary.base64}}")
     end
   
     def init()

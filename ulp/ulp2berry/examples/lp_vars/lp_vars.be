@@ -11,7 +11,7 @@ class lp_vars_class : Driver
     var ulp_string
     
     def get_code()
-      return bytes().fromb64("{{code_b64}}")
+      return bytes().fromb64("{{binary.base64}}")
     end
   
     def init()
@@ -31,13 +31,13 @@ class lp_vars_class : Driver
 
     def get_iteration()
       import ULP
-      return ULP.get_mem({{ulp_iteration}})
+      return ULP.get_mem({{symbols.ulp_iteration.address}})
     end
 
     def get_float()
       import ULP
       var float_bytes = bytes(-4)
-      float_bytes.seti(0,ULP.get_mem({{ulp_float_var}}),4)
+      float_bytes.seti(0,ULP.get_mem({{symbols.ulp_float.address}}),4)
       return float_bytes.getfloat(0)
     end
 
@@ -45,59 +45,59 @@ class lp_vars_class : Driver
       import ULP
       var float_bytes = bytes(-4)
       float_bytes.setfloat(0,value)
-      ULP.set_mem({{ulp_float_var}},float_bytes.geti(0,4))
+      ULP.set_mem({{symbols.ulp_float.address}},float_bytes.geti(0,4))
       return self.get_float()
     end
 
     def get_int()
       import ULP
-      return ULP.get_mem({{ulp_int_var}})
+      return ULP.get_mem({{symbols.ulp_int.address}})
     end
 
     def set_int(value)
       import ULP
-      ULP.set_mem({{ulp_int_var}},value)
+      ULP.set_mem({{symbols.ulp_int.address}},value)
       return self.get_int()
     end
     
     def get_uint()
       import ULP
-      return ULP.get_mem({{ulp_uint_var}})
+      return ULP.get_mem({{symbols.ulp_uint.address}})
     end
 
     def set_uint(value)
       import ULP
-      ULP.set_mem({{ulp_uint_var}},value)
+      ULP.set_mem({{symbols.ulp_uint.address}},value)
       return self.get_uint()
     end
 
     def get_bool()
       import ULP
-      return ULP.get_mem({{ulp_bool_var}}) == 1 ? true : false
+      return ULP.get_mem({{symbols.ulp_bool.address}}) == 1 ? true : false
     end
 
     def set_bool(value)
       import ULP
-      ULP.set_mem({{ulp_bool_var}},value ? 1 : 0)
+      ULP.set_mem({{symbols.ulp_bool.address}},value ? 1 : 0)
       return self.get_bool()
     end
 
     def get_string()
       import ULP
-      var length = {{ulp_string_var_length}}
+      var length = {{symbols.ulp_string.length}}
       var char_bytes = bytes(-4 * (length+1))
       for i:0..length
-        char_bytes.seti(i * 4,ULP.get_mem({{ulp_string_var}}+i), 4)
+        char_bytes.seti(i * 4,ULP.get_mem({{symbols.ulp_string.address}}+i), 4)
       end
       return char_bytes.asstring()
     end
 
     def set_string(value)
       import ULP
-      var length = {{ulp_string_var_length}}
+      var length = {{symbols.ulp_string.length}}
       var char_bytes = bytes().fromstring(value)
       for i:0..length
-        ULP.set_mem({{ulp_string_var}}+i,char_bytes.geti(i * 4,4))
+        ULP.set_mem({{symbols.ulp_string.address}}+i,char_bytes.geti(i * 4,4))
       end
       return self.get_string()
     end
