@@ -4,7 +4,7 @@ class ulp_class : Driver
     var ulp_sleep_time
     
     def get_code()
-      return bytes().fromb64("{{binaryResult.binary64}}")
+      return bytes().fromb64("{{binary.base64}}")
     end
   
     def init_ulp()
@@ -46,7 +46,7 @@ class lp_uart_sml_class : ulp_class
     end
 
     def get_obis_configs()
-      var obis_configs_length = {{mainHResult.ulp_obis_configs.length}}
+      var obis_configs_length = {{symbols.ulp_obis_configs.length}}
       var obis_config_size = 2
       var obis_configs_list = []
       for i:0..((obis_configs_length/obis_config_size)-1)
@@ -58,8 +58,8 @@ class lp_uart_sml_class : ulp_class
     def get_obis_config(index)
       import ULP
       var obis_config_bytes = bytes(-8)
-      obis_config_bytes.seti(0,ULP.get_mem({{mapResult.symbols.ulp_obis_configs.addressInt}}+index*2),4)
-      obis_config_bytes.seti(4,ULP.get_mem({{mapResult.symbols.ulp_obis_configs.addressInt}}+index*2+1),4)
+      obis_config_bytes.seti(0,ULP.get_mem({{symbols.ulp_obis_configs.address}}+index*2),4)
+      obis_config_bytes.seti(4,ULP.get_mem({{symbols.ulp_obis_configs.address}}+index*2+1),4)
       var obis_config = {}
       var currentPosition = 0;
       obis_config["obis"] = obis_config_bytes[(currentPosition)..(currentPosition+5)].tohex()
@@ -77,22 +77,22 @@ class lp_uart_sml_class : ulp_class
       var scaler_bytes = bytes(-1)
       scaler_bytes.seti(0,scaler,1)
       obis_config = obis_config + scaler_bytes
-      ULP.set_mem({{mapResult.symbols.ulp_obis_configs.addressInt}}+index*2,obis_config[0..3].geti(0,4))
-      ULP.set_mem({{mapResult.symbols.ulp_obis_configs.addressInt}}+index*2+1,obis_config[4..7].geti(0,4))
+      ULP.set_mem({{symbols.ulp_obis_configs.address}}+index*2,obis_config[0..3].geti(0,4))
+      ULP.set_mem({{symbols.ulp_obis_configs.address}}+index*2+1,obis_config[4..7].geti(0,4))
       return self.get_obis_config(index)
     end
 
     def get_iteration()
       import ULP
-      return ULP.get_mem({{mapResult.symbols.ulp_iteration.addressInt}})
+      return ULP.get_mem({{symbols.ulp_iteration.address}})
     end
 
     def get_obis_value(index)
-      return self.get_float({{mapResult.symbols.ulp_obis_values.addressInt}},index)
+      return self.get_float({{symbols.ulp_obis_values.address}},index)
     end
 
     def get_obis_values()
-      var obis_configs_length = {{mainHResult.ulp_obis_configs.length}}
+      var obis_configs_length = {{symbols.ulp_obis_configs.length}}
       var obis_config_size = 2
       var obis_values_list = []
       for i:0..((obis_configs_length/obis_config_size)-1)
@@ -105,13 +105,13 @@ class lp_uart_sml_class : ulp_class
 
     def get_print_variable()
       import ULP
-      return ULP.get_mem({{mapResult.symbols.ulp_print_variable.addressInt}})
+      return ULP.get_mem({{symbols.ulp_print_variable.address}})
     end
 
     def set_print_variable(value)
       import ULP
-      ULP.set_mem({{mapResult.symbols.ulp_print_variable.addressInt}},value)
-      return ULP.get_mem({{mapResult.symbols.ulp_print_variable.addressInt}})
+      ULP.set_mem({{symbols.ulp_print_variable.address}},value)
+      return ULP.get_mem({{symbols.ulp_print_variable.address}})
     end
 
     def send_uart_message(message)

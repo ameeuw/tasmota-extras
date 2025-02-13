@@ -134,11 +134,6 @@ class ULPProcessor {
           addressInt = (addressInt - 0x50000000) / 4; // Word width. When getting address they jump one every 4 bytes
           shifted = true;
         }
-
-        // if (!symbols[symbol]) {
-        //   symbols[symbol] = [];
-        // }
-
         symbols[symbol] = {
           symbol,
           address,
@@ -265,8 +260,51 @@ class BerryGenerator {
     if (!mapResult || !binaryResult || !template) {
       throw new Error("Missing required data for Berry file generation");
     }
+
+    /*
+
+    {
+     "symbols": {
+        binary: {
+        "base64": string,
+        "length": number
+        },
+        symbols: {
+          [symbol]: {
+            "type": "int" | "float" | "string" | "bool",
+            "length": number,
+            "address": string,
+          }
+        },
+        buildTarget: string,
+        type: "FSM" | "RISCV" | "LP_CORE",
+    }
+
+    */
+
+    // Transform the data into the required structure
+    const transformedData = {
+      binary: {
+        base64: binaryResult.binary64,
+        length: binaryResult.length,
+      },
+      symbols: Object.entries(mapResult.symbols).reduce((acc, [key, value]) => {
+        // Get the type and length from mainHResult if available
+        const varInfo = mainHResult[key] || { type: "unknown", length: 1 };
+
+        acc[key] = {
+          type: varInfo.type,
+          length: varInfo.length,
+          address: value.addressInt,
+        };
+        return acc;
+      }, {}),
+      buildTarget: ulpData.buildTarget,
+      type: mapResult.type,
+    };
+
     const liquidTemplate = this.engine.parse(template);
-    return this.engine.render(liquidTemplate, ulpData);
+    return this.engine.render(liquidTemplate, transformedData);
   }
 
   printTruncated(content) {
