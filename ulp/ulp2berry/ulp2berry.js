@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
-const liquid = require("liquidjs");
+const { Liquid } = require("liquidjs");
 
 class Args {
   constructor(args = process.argv.slice(2)) {
@@ -122,7 +122,7 @@ class ULPProcessor {
 
   parseMapFile(mapFileContent) {
     let type = "FSM";
-    const symbols_keyed = {};
+    const symbols = {};
 
     for (const line of mapFileContent) {
       if (line.match(/0x[0-9a-fA-F]+\s+ulp_/)) {
@@ -135,16 +135,16 @@ class ULPProcessor {
           shifted = true;
         }
 
-        if (!symbols_keyed[address]) {
-          symbols_keyed[address] = [];
-        }
+        // if (!symbols[symbol]) {
+        //   symbols[symbol] = [];
+        // }
 
-        symbols_keyed[address].push({
+        symbols[symbol] = {
           symbol,
           address,
           addressInt,
           shifted,
-        });
+        };
       }
 
       if (line.includes("ulp_riscv_run")) {
@@ -154,7 +154,7 @@ class ULPProcessor {
       }
     }
 
-    return { type, symbols_keyed };
+    return { type, symbols };
   }
 
   parseBinSFile(sFileContent) {
@@ -225,24 +225,25 @@ class ULPProcessor {
 class BerryGenerator {
   constructor(projectName) {
     this.projectName = projectName;
-    this.engine = liquid({
-      strict_filters: true,
-    });
+    this.engine = new Liquid();
   }
 
   getDefaultTemplate() {
     return [
       "import ULP",
       "ULP.wake_period(0,1000 * 1000) # timer register 0 - every 1000 millisecs",
-      'c = bytes().fromb64("{{code_b64}}")',
+      'c = bytes().fromb64("{{binaryResult.binary64}}")',
       "ULP.load(c)",
       "ULP.run()",
     ].join("\n");
   }
 
-  generateFile(ulpData, template = this.getDefaultTemplate(), verbose = false) {
-    const liquidTemplate = this.engine.parse(template);
-    const berryContent = this.generateContent(ulpData, template);
+  async generateFile(
+    ulpData,
+    template = this.getDefaultTemplate(),
+    verbose = false
+  ) {
+    const berryContent = await this.generateContent(ulpData, template);
 
     console.log("\nGenerated berry file.");
     console.log(
@@ -258,41 +259,14 @@ class BerryGenerator {
     return berryContent;
   }
 
-  generateContent(ulpData, template) {
+  async generateContent(ulpData, template) {
     const { mapResult, binaryResult, mainHResult } = ulpData;
 
     if (!mapResult || !binaryResult || !template) {
       throw new Error("Missing required data for Berry file generation");
     }
-
-    // Replace binary content
-    template = template.replace("{{code_b64}}", binaryResult.binary64);
-
-    // Replace symbol mappings
-    const parseableMappings = Object.values(mapResult.symbols_keyed)
-      .flat()
-      .filter((v) => v.shifted);
-
-    parseableMappings.forEach((v) => {
-      template = template.replace(
-        new RegExp(`{{${v.symbol}}}`, "g"),
-        v.addressInt
-      );
-    });
-
-    // Replace length mappings
-    const lengthMappings = Object.entries(mainHResult).map(([key, value]) => ({
-      symbol: `${key}_length`,
-      length: value.length,
-    }));
-
-    lengthMappings.forEach((v) => {
-      template = template.replace(new RegExp(`{{${v.symbol}}}`, "g"), v.length);
-    });
-
-    // Check for text and replace it with the symbol
-
-    return template;
+    const liquidTemplate = this.engine.parse(template);
+    return this.engine.render(liquidTemplate, ulpData);
   }
 
   printTruncated(content) {
@@ -381,19 +355,18 @@ class App {
     this.tappBuilder = new TAppBuilder(this.projectName);
   }
 
-  run() {
+  async run() {
     try {
       const ulpData = this.processor.process();
 
       if (this.args.has("-t")) {
         this.tappBuilder.build(this.args.getDirectory(), ulpData);
       } else {
-        console.log(ulpData);
         const template = this.args.has("-r")
           ? this.readBerryTemplate(this.args.getDirectory())
           : this.generator.getDefaultTemplate();
 
-        const berryContent = this.generator.generateFile(
+        const berryContent = await this.generator.generateFile(
           ulpData,
           template,
           this.args.has("-v")
