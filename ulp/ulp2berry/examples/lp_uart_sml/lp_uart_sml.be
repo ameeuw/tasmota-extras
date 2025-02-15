@@ -1,41 +1,106 @@
 var lp_uart_sml = module('lp_uart_sml')
 
-class ulp_class : Driver
+class ulp2berry_class : Driver
     var ulp_sleep_time
-    
+  
+    # Method to hold the ULP code
     def get_code()
       return bytes().fromb64("{{binary.base64}}")
     end
   
+    # Method to initialize the ULP
     def init_ulp()
       self.ulp_sleep_time = 5 * 1000 * 1000
       import ULP
       ULP.wake_period(0,self.ulp_sleep_time)
-      var c = self.get_code()
-      ULP.load(c)
+      ULP.load(self.get_code())
       ULP.run()
     end
 
+    # Method to get a float value from the ULP
     def get_float(address, index)
+      # If index is not provided, set it to 0
+      if index == nil
+        index = 0
+      end
+      
+      import ULP
+      # Reserve 4 bytes for the float
+      var float_bytes = bytes(-4)
+      # Get the content of the address as int from the ULP memory
+      float_bytes.seti(0,ULP.get_mem(address+index),4)
+      # Return content as float value
+      return float_bytes.getfloat(0)
+    end
+
+    # Method to set a float value in the ULP
+    def set_float(value, address, index)
+      # If index is not provided, set it to 0
       if index == nil
         index = 0
       end
       import ULP
+      # Reserve 4 bytes for the float
       var float_bytes = bytes(-4)
-      float_bytes.seti(0,ULP.get_mem(address+index),4)
-      return float_bytes.getfloat(0)
+      # Set the float value
+      float_bytes.setfloat(0,value)
+      # Set the content of the address as int to the ULP memory
+      ULP.set_mem(address + index, float_bytes.geti(0,4))
+      # Return the float value
+      return self.get_float(address, index)
     end
 
-    def set_float(address, value)
+    # Method to get an int value from the ULP
+    def get_int(address, index)
+      # If index is not provided, set it to 0
+      if index == nil
+        index = 0
+      end
       import ULP
-      var float_bytes = bytes(-4)
-      float_bytes.setfloat(0,value)
-      ULP.set_mem(address,float_bytes.geti(0,4))
-      return self.get_float(address)
+      # Return the content of the address as int from the ULP memory
+      return ULP.get_mem(address+index)
+    end
+
+    # Method to set an int value in the ULP
+    def set_int(value, address, index)
+      # If index is not provided, set it to 0
+      if index == nil
+        index = 0
+      end
+      import ULP
+      # Set the content of the address as int to the ULP memory
+      ULP.set_mem(address + index, value)
+      # Return the int value
+      return self.get_int(address, index)
+    end
+
+    # Method to get a string value from the ULP
+    def get_string(address, length)
+      import ULP
+      # Reserve bytes for the string
+      var char_bytes = bytes(-4 * (length+1))
+      # Get the content of the address as int from the ULP memory
+      for i:0..length
+        char_bytes.seti(i * 4,ULP.get_mem(address+i), 4)
+      end
+      return char_bytes.asstring()
+    end
+
+    # Method to set a string value in the ULP
+    def set_string(value, address, length)
+      import ULP
+      # Reserve bytes for the string
+      var char_bytes = bytes().fromstring(value)
+      # Set the content of the address as int to the ULP memory
+      for i:0..length
+        ULP.set_mem(address+i,char_bytes.geti(i * 4,4))
+      end
+      # Return the string value
+      return self.get_string(address, length)
     end
 end
 
-class lp_uart_sml_class : ulp_class
+class lp_uart_sml_class : ulp2berry_class
     var ser
 
     def init()
@@ -61,10 +126,9 @@ class lp_uart_sml_class : ulp_class
       obis_config_bytes.seti(0,ULP.get_mem({{symbols.ulp_obis_configs.address}}+index*2),4)
       obis_config_bytes.seti(4,ULP.get_mem({{symbols.ulp_obis_configs.address}}+index*2+1),4)
       var obis_config = {}
-      var currentPosition = 0;
-      obis_config["obis"] = obis_config_bytes[(currentPosition)..(currentPosition+5)].tohex()
-      obis_config["unit"] = obis_config_bytes.geti(currentPosition+6,1)
-      obis_config["scaler"] = obis_config_bytes.geti(currentPosition+7,1)
+      obis_config["obis"] = obis_config_bytes[0..5].tohex()
+      obis_config["unit"] = obis_config_bytes[6]
+      obis_config["scaler"] = obis_config_bytes[7]
       return obis_config
     end
 
@@ -123,12 +187,12 @@ class lp_uart_sml_class : ulp_class
     end
   
     #- add sensor value to teleperiod -#
-    def json_append()
-      import string
-      var msg = string.format(",\"ULP\":{\"iteration\":%i}",
-                                   self.get_iteration())
-      tasmota.response_append(msg)
-    end
+    # def json_append()
+    #   import string
+    #   var msg = string.format(",\"ULP\":{\"iteration\":%i}",
+    #                                self.get_iteration())
+    #   tasmota.response_append(msg)
+    # end
 end
 lp_uart_sml.lp_uart_sml = lp_uart_sml_class()
 
