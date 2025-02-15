@@ -100,7 +100,7 @@ class ULPProcessor {
     buildFiles.forEach((file) => {
       const filePath = path.join(this.buildPath, file);
       if (file.endsWith(".bin.S")) {
-        sFileContent = fs.readFileSync(filePath, "utf8").split(/\r\n|\n/);
+        sFileContent = fs.readFileSync(filePath, "utf8");
       } else if (file.endsWith(".map") && !file.includes("bootloader")) {
         mapFileContent = fs.readFileSync(filePath, "utf8").split(/\r\n|\n/);
       }
@@ -153,34 +153,42 @@ class ULPProcessor {
   }
 
   parseBinSFile(sFileContent) {
-    const binary = [];
-    let words;
+    // Extract all byte values using regex
+    const bytePattern = /\.byte\s+((?:0x[0-9a-f]{2},\s*)*0x[0-9a-f]{2})/g;
+    const bytes = [];
 
-    for (const line of sFileContent) {
-      if (line.startsWith(".byte")) {
-        const tokens = line.split(" ");
-        for (const token of tokens) {
-          if (token.startsWith("0x")) {
-            binary.push(parseInt(token.substring(2), 16));
-          }
-        }
-      }
-      if (line.startsWith(".word") || line.startsWith(".long")) {
-        words = parseInt(line.split(" ")[1]);
+    let match;
+    while ((match = bytePattern.exec(sFileContent)) !== null) {
+      // Split the byte string and convert each hex value to a number
+      const byteValues = match[1].split(",").map((b) => parseInt(b.trim(), 16));
+      bytes.push(...byteValues);
+    }
+
+    // Look for word length at the end of the file
+    const lengthMatch = sFileContent.match(/\.word\s+(\d+)\s*$/);
+    if (lengthMatch) {
+      const expectedLength = parseInt(lengthMatch[1], 10);
+      if (bytes.length !== expectedLength) {
+        throw new Error(
+          `Length mismatch: Expected ${expectedLength} bytes, got ${bytes.length} bytes`
+        );
       }
     }
 
-    if (binary.length === words) {
-      let b64 = "";
-      for (const b of binary) {
-        b64 += String.fromCharCode(b);
-      }
-      return {
-        length: words,
-        binary64: Buffer.from(b64).toString("base64"),
-      };
-    }
-    return null;
+    // Convert byte array to Uint8Array
+    const uint8Array = new Uint8Array(bytes);
+
+    // Convert to base64
+    let binary = "";
+    uint8Array.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+
+    return {
+      length: bytes.length,
+      // binary64: Buffer.from(bytes).toString("base64"),
+      base64: btoa(binary),
+    };
   }
 
   checkULPSDKConfig(file) {
@@ -227,7 +235,7 @@ class BerryGenerator {
     return [
       "import ULP",
       "ULP.wake_period(0,1000 * 1000) # timer register 0 - every 1000 millisecs",
-      'c = bytes().fromb64("{{binaryResult.binary64}}")',
+      'c = bytes().fromb64("{{binary.base64}}")',
       "ULP.load(c)",
       "ULP.run()",
     ].join("\n");
@@ -284,10 +292,7 @@ class BerryGenerator {
 
     // Transform the data into the required structure
     const transformedData = {
-      binary: {
-        base64: binaryResult.binary64,
-        length: binaryResult.length,
-      },
+      binary: binaryResult,
       symbols: Object.entries(mapResult.symbols).reduce((acc, [key, value]) => {
         // Get the type and length from mainHResult if available
         const varInfo = mainHResult[key] || { type: "unknown", length: 1 };
