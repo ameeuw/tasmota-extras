@@ -405,18 +405,24 @@ class App {
       if (this.args.has("-t")) {
         this.tappBuilder.build(this.args.getDirectory(), ulpData);
       } else {
-        const template = this.args.has("-r")
-          ? this.readBerryTemplate(this.args.getDirectory())
-          : this.generator.getDefaultTemplate();
+        const templates = this.args.has("-r")
+          ? this.readBerryTemplates(this.args.getDirectory())
+          : [this.generator.getDefaultTemplate()];
 
-        const berryContent = await this.generator.generateFile(
-          ulpData,
-          template,
-          this.args.has("-v")
-        );
+        for (const template of templates) {
+          const berryContent = await this.generator.generateFile(
+            ulpData,
+            template.content,
+            this.args.has("-v")
+          );
 
-        if (this.args.has("-w")) {
-          this.writeBerryFile(this.args.getDirectory(), berryContent);
+          if (this.args.has("-w")) {
+            this.writeBerryFile(
+              berryContent,
+              this.args.getDirectory(),
+              template.name
+            );
+          }
         }
       }
     } catch (error) {
@@ -425,22 +431,27 @@ class App {
     }
   }
 
-  readBerryTemplate(directoryPath) {
+  readBerryTemplates(directoryPath) {
     const files = fs.readdirSync(directoryPath);
-    const berryFile = files.find((file) => file.endsWith(".be"));
+    const berryFiles = files.filter((file) => file.endsWith(".be"));
 
-    if (berryFile) {
-      console.log("Processing:", berryFile);
-      return fs.readFileSync(path.join(directoryPath, berryFile), "utf8");
+    if (berryFiles.length > 0) {
+      return berryFiles.map((file) => {
+        const content = fs.readFileSync(path.join(directoryPath, file), "utf8");
+        return {
+          name: file,
+          content,
+        };
+      });
     }
 
     return null;
   }
 
-  writeBerryFile(directoryPath, content) {
+  writeBerryFile(content, directoryPath, templateName) {
     const buildPath = path.join(directoryPath, "build");
     if (fs.existsSync(buildPath)) {
-      const filePath = path.join(buildPath, `${this.projectName}.be`);
+      const filePath = path.join(buildPath, templateName);
       fs.writeFileSync(filePath, content);
       console.log(`Berry file written to: ${filePath}`);
     }
