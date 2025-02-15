@@ -229,6 +229,4 @@ if tasmota
 
 end
 
-lp_uart_sml.lp_uart_sml.send_ehz_bin()
-
 return lp_uart_sml

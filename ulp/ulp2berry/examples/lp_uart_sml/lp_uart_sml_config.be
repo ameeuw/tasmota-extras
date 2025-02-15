@@ -1,13 +1,12 @@
 #######################################################################
-# PowerQuartier accounts UI
+# LP UART SML Config UI
 #
 #######################################################################
-import persist
 import webserver
 
 var lp_uart_sml_config = module('lp_uart_sml_config')
   
-class LpUartSmlConfig
+class lp_uart_sml_config_class
   def init()
   end
   
@@ -25,10 +24,7 @@ class LpUartSmlConfig
       webserver.content_start("LP UART SML Config")           #- title of the web page -#
       webserver.content_send_style()                  #- send standard Tasmota styles -#
       webserver.content_send("<style>label{display:block;}</style>")
-    #   if persist.has("obis_configs")
         import json
-        # var obis_configs = json.parse(persist.obis_configs)
-        # webserver.content_send("<p>PowerQuartier User: " + pqClient.email + "</p>")
         webserver.content_send(format("<legend><b title='PowerQuartier'>Accounts</b></legend>"))
         webserver.content_send("<p><form id=lp_uart_sml style='display: block;' action='/lp_uart_sml' method='post'>")
         webserver.content_send(format("<table style='width:100%%'>"))
@@ -135,7 +131,7 @@ class LpUartSmlConfig
     end
 end  
 
-lp_uart_sml_config.lp_uart_sml_config = LpUartSmlConfig()
+lp_uart_sml_config.lp_uart_sml_config = lp_uart_sml_config_class()
 
 
 #- create and register driver in Tasmota -#

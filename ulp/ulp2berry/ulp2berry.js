@@ -121,7 +121,7 @@ class ULPProcessor {
   }
 
   parseMapFile(mapFileContent) {
-    let type = "FSM";
+    let type = "fsm";
     const symbols = {};
 
     for (const line of mapFileContent) {
@@ -143,9 +143,9 @@ class ULPProcessor {
       }
 
       if (line.includes("ulp_riscv_run")) {
-        type = "RISCV";
+        type = "riscv";
       } else if (line.includes("ulp_lp_core_run")) {
-        type = "LP_CORE";
+        type = "lp_core";
       }
     }
 
@@ -286,7 +286,8 @@ class BerryGenerator {
             }
           },
           buildTarget: string,
-          type: "FSM" | "RISCV" | "LP_CORE",
+          ulpArch: "fsm" | "riscv" | "lp_core",
+          projectName: string,
       }
       =================================`);
 
@@ -305,7 +306,8 @@ class BerryGenerator {
         return acc;
       }, {}),
       buildTarget: ulpData.buildTarget,
-      type: mapResult.type,
+      ulpArch: mapResult.type,
+      projectName: this.projectName,
     };
 
     const liquidTemplate = this.engine.parse(template);
@@ -334,14 +336,33 @@ class TAppBuilder {
     const { mapResult, buildTarget } = ulpData;
 
     try {
-      // Read the Berry file
-      const berryFileContent = fs.readFileSync(
-        path.join(buildPath, `${this.projectName}.be`),
-        "utf8"
+      // Read relevant Berry files (starting with the project name)
+
+      const files = fs.readdirSync(buildPath);
+      const berryFiles = files.filter(
+        (file) => file.startsWith(this.projectName) && file.endsWith(".be")
       );
 
-      // Create template
-      const template = this.createTAppTemplate(buildTarget, mapResult.type);
+      console.log(
+        `Found ${berryFiles.length} relevant Berry files: "${berryFiles.join(
+          '", "'
+        )}"`
+      );
+
+      const berryFileContents = berryFiles.map((file) => {
+        return {
+          name: file,
+          content: fs.readFileSync(path.join(buildPath, file), "utf8"),
+        };
+      });
+
+      // Get default autoexec file if not present
+      if (!berryFileContents.find((file) => file.name.includes("autoexec"))) {
+        berryFileContents.push({
+          name: "autoexec.be",
+          content: this.getDefaultAutoexec(buildTarget, mapResult.type),
+        });
+      }
 
       // Create TAPP structure
       const tappPath = path.join(buildPath, `${this.projectName}-tapp`);
@@ -351,11 +372,13 @@ class TAppBuilder {
 
       // Create directory and write files
       fs.mkdirSync(tappPath);
-      fs.writeFileSync(
-        path.join(tappPath, `${this.projectName}.be`),
-        berryFileContent
-      );
-      fs.writeFileSync(path.join(tappPath, "autoexec.be"), template);
+
+      berryFileContents.forEach((file) => {
+        if (file.name.includes("autoexec")) {
+          file.name = "autoexec.be";
+        }
+        fs.writeFileSync(path.join(tappPath, file.name), file.content);
+      });
 
       // Create ZIP archive
       const tappFile = path.join(
@@ -371,7 +394,7 @@ class TAppBuilder {
     }
   }
 
-  createTAppTemplate(buildTarget, ulpArch) {
+  getDefaultAutoexec(buildTarget, ulpArch) {
     return `print("target: ${buildTarget}")
 print("ULP architecture: ${ulpArch}")
 var app
