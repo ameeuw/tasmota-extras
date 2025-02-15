@@ -51,7 +51,7 @@ class PqAccountsUi
         # var obis_configs = json.parse(persist.obis_configs)
         # webserver.content_send("<p>PowerQuartier User: " + pqClient.email + "</p>")
         webserver.content_send(format("<legend><b title='PowerQuartier'>Accounts</b></legend>"))
-        webserver.content_send("<p><form id=pq_accounts style='display: block;' action='/pq_accounts' method='post'>")
+        webserver.content_send("<p><form id=lp_uart_sml style='display: block;' action='/lp_uart_sml' method='post'>")
         webserver.content_send(format("<table style='width:100%%'>"))
         
         var obis_configs = tasmota.cmd('get_obis_configs')
@@ -97,7 +97,7 @@ class PqAccountsUi
         webserver.content_send("</tr></table>")
 
 
-        webserver.content_send("<button name='store_account' class='button bgrn'>Save</button>")
+        webserver.content_send("<button name='store_obis_config' class='button bgrn'>Save</button>")
         webserver.content_send("</form></p>")
 
         webserver.content_send(format("<hr><table style='width:100%%'>"))
@@ -121,11 +121,16 @@ class PqAccountsUi
     def post_pq_account()
       if !webserver.check_privileged_access() return nil end      
       try
-        if webserver.has_arg("store_account")
+        if webserver.has_arg("store_obis_config")
           # read arguments
-          persist.auid = webserver.arg("auid")
-          persist.save()
-          webserver.redirect("/cn?")
+          var result = tasmota.cmd(format(
+            "set_obis_config %s,%s,%s,%s",
+            webserver.arg("index"),
+            webserver.arg("obis"),
+            webserver.arg("unit"),
+            webserver.arg("scaler")))
+          print(format("BRY: set_obis_config> '%s'", result))
+          webserver.redirect("/lp_uart_sml?")
         end
       except .. as e,m
         print(format("BRY: Exception> '%s' - %s", e, m))
