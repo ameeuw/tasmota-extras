@@ -53,26 +53,66 @@ class PqAccountsUi
         webserver.content_send(format("<legend><b title='PowerQuartier'>Accounts</b></legend>"))
         webserver.content_send("<p><form id=pq_accounts style='display: block;' action='/pq_accounts' method='post'>")
         webserver.content_send(format("<table style='width:100%%'>"))
-
-        var obis_configs = lp_uart_sml.lp_uart_sml.get_obis_configs()
+        
+        var obis_configs = tasmota.cmd('get_obis_configs')
         if (obis_configs)
           webserver.content_send("<th>OBIS</th><th>Unit</th><th>Scaler</th>")
           for obis_config:obis_configs
-
-            webserver.content_send(format("<tr><td>%s</td><td>%i</td><td>%i</td></tr>", obis_config["obis"], obis_config["unit"], obis_config["scaler"]))
+            webserver.content_send(
+              format("<tr><td>%s</td><td>%i</td><td>%i</td></tr>", 
+              obis_config["obis"], 
+              obis_config["unit"], 
+              obis_config["scaler"]))
           end
         else
           webserver.content_send("<p>No accounts found</p>")
         end
         webserver.content_send("</table><hr>")
+
         webserver.content_send(format("<table style='width:100%%'>"))
-        webserver.content_send("<th>OBIS</th><th>Unit</th><th>Scaler</th><tr>")
-        webserver.content_send(format("<td style='width:300px'><input type='text' name='obis' value=''></td>"))
-        webserver.content_send(format("<td style='width:300px'><input type='text' name='unit' value=''></td>"))
-        webserver.content_send(format("<td style='width:300px'><input type='text' name='scaler' value=''></td>"))
+        webserver.content_send("<th>Index</th><th>OBIS</th><th>Unit</th><th>Scaler</th><tr>")
+        webserver.content_send("<td style='width:300px'><select name='index' id='indexSelector'>")
+        for i:0..(obis_configs.size()-1)
+          webserver.content_send(format("<option value='%i'>%i</option>", i, i))
+        end
+        webserver.content_send("</select></td>")
+
+        webserver.content_send(format(
+          "<td style='width:300px'><input type='text' name='obis' value='%s' id='obisInput'></td>",
+          obis_configs[0]["obis"]))
+        webserver.content_send(format(
+          "<td style='width:300px'><input type='text' name='unit' value='%s' id='unitInput'></td>",
+          obis_configs[0]["unit"]))
+        webserver.content_send(format(
+          "<td style='width:300px'><input type='text' name='scaler' value='%s' id='scalerInput'></td>",
+          obis_configs[0]["scaler"]))
+
+        webserver.content_send("<script>document.getElementById('indexSelector').addEventListener('change', function() {")
+        webserver.content_send("var obis_configs = JSON.parse('" + json.dump(obis_configs) + "');")
+        webserver.content_send("document.getElementById('obisInput').value = obis_configs[this.value].obis;")
+        webserver.content_send("document.getElementById('unitInput').value = obis_configs[this.value].unit;")
+        webserver.content_send("document.getElementById('scalerInput').value = obis_configs[this.value].scaler;")
+        webserver.content_send("})")
+        webserver.content_send("</script>")
         webserver.content_send("</tr></table>")
+
+
         webserver.content_send("<button name='store_account' class='button bgrn'>Save</button>")
         webserver.content_send("</form></p>")
+
+        webserver.content_send(format("<hr><table style='width:100%%'>"))
+        webserver.content_send("<th>Symbol</th><th>Address</th><th>Type</th><th>Length</th><tr>")
+        var symbols = json.load('{{symbols | json}}')
+        for name:symbols.keys()
+          webserver.content_send(
+            format("<tr><td>%s</td><td>%s</td><td>%i</td><td>%i</td></tr>", 
+            name, 
+            symbols[name]["address"], 
+            symbols[name]["type"], 
+            symbols[name]["length"]))
+        end
+        webserver.content_send("</tr></table>")
+
         webserver.content_send("<p></p></fieldset><p></p>")
 
       webserver.content_stop()
