@@ -5,42 +5,21 @@
 import persist
 import webserver
 
-var pq_accounts = module('pq_accounts')
+var lp_uart_sml_config = module('lp_uart_sml_config')
   
-class PqAccountsUi
-  var auid, base_url
+class LpUartSmlConfig
   def init()
-    if ! persist.has("auid")
-      self.auid = ""
-    else
-      self.auid = persist.auid
-    end
-    if ! persist.has("base_url")
-      self.base_url = "https://develop.exnaton.com/api/v2"
-    else
-      self.base_url = persist.base_url
-    end
-
   end
   
   def web_add_config_button()
     webserver.content_send("<p><form id=lp_uart_sml action='lp_uart_sml' style='display: block;' method='get'><button>Configure LP UART SML</button></form></p>")
   end
-
-  def findInList(array, key, value)
-    for item:array
-        if item[key] == value
-            return item
-        end
-    end
-    return nil
-  end
   
   #######################################################################
-  # Display the complete page on `/pq_accounts'
+  # Display the complete page on `/lp_uart_sml'
   #######################################################################
   
-  def get_pq_accounts()
+  def get_lp_uart_sml()
     if !webserver.check_privileged_access() return nil end
   
       webserver.content_start("LP UART SML Config")           #- title of the web page -#
@@ -118,7 +97,7 @@ class PqAccountsUi
       webserver.content_stop()
     end
     
-    def post_pq_account()
+    def post_lp_uart_sml()
       if !webserver.check_privileged_access() return nil end      
       try
         if webserver.has_arg("store_obis_config")
@@ -151,23 +130,22 @@ class PqAccountsUi
       
     def web_add_handler()
       #- we need to register a closure, not just a function, that captures the current instance -#
-      webserver.on("/lp_uart_sml", / -> self.get_pq_accounts(), webserver.HTTP_GET)
-      webserver.on("/lp_uart_sml", / -> self.post_pq_account(), webserver.HTTP_POST)
+      webserver.on("/lp_uart_sml", / -> self.get_lp_uart_sml(), webserver.HTTP_GET)
+      webserver.on("/lp_uart_sml", / -> self.post_lp_uart_sml(), webserver.HTTP_POST)
     end
 end  
 
-pq_accounts.PqAccountsUi=PqAccountsUi
+lp_uart_sml_config.lp_uart_sml_config = LpUartSmlConfig()
 
 
 #- create and register driver in Tasmota -#
 if tasmota
-  var PqAccountsUi_instance = pq_accounts.PqAccountsUi()
-  tasmota.add_driver(PqAccountsUi_instance)
+  tasmota.add_driver(lp_uart_sml_config.lp_uart_sml_config)
   ## can be removed if put in 'autoexec.bat'
-  PqAccountsUi_instance.web_add_handler()
+  lp_uart_sml_config.lp_uart_sml_config.web_add_handler()
 end
 
-return pq_accounts
+return lp_uart_sml_config
 
 #- For debugging purposes, you can manually call the following to register the web handler -#
 #- as it is automatically called only if the instance was registered at startup, for example
