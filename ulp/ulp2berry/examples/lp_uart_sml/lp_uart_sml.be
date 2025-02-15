@@ -82,11 +82,6 @@ class lp_uart_sml_class : ulp_class
       return self.get_obis_config(index)
     end
 
-    def get_iteration()
-      import ULP
-      return ULP.get_mem({{symbols.ulp_iteration.address}})
-    end
-
     def get_obis_value(index)
       return self.get_float({{symbols.ulp_obis_values.address}},index)
     end
@@ -101,17 +96,6 @@ class lp_uart_sml_class : ulp_class
         obis_values_list.push(obis_config)
       end
       return obis_values_list
-    end
-
-    def get_print_variable()
-      import ULP
-      return ULP.get_mem({{symbols.ulp_print_variable.address}})
-    end
-
-    def set_print_variable(value)
-      import ULP
-      ULP.set_mem({{symbols.ulp_print_variable.address}},value)
-      return ULP.get_mem({{symbols.ulp_print_variable.address}})
     end
 
     def send_uart_message(message)
@@ -130,17 +114,11 @@ class lp_uart_sml_class : ulp_class
     #- display sensor value in the web UI -#
     def web_sensor()
       import string
-      var msg = string.format(
-               "{s}<hr>{m}<hr>{e}"
-               "{s}ULP Variable{m}value:{e}"
-               "{s}iteration{m}%i{e}"..
-               "{s}obis_values[0]{m}%f{e}"..
-               "{s}obis_values[1]{m}%f{e}"..
-               "{s}print_variable{m}%i{e}",
-               self.get_iteration(),
-               self.get_obis_value(0),
-               self.get_obis_value(1),
-               self.get_print_variable())
+      var obis_values = self.get_obis_values()
+      var msg = ""
+      for obis_value:obis_values
+        msg += string.format("{s}%s{m}%f{e}", obis_value["obis"], obis_value["value"])
+      end
       tasmota.web_send_decimal(msg)
     end
   
@@ -157,16 +135,6 @@ lp_uart_sml.lp_uart_sml = lp_uart_sml_class()
 
 if tasmota
   tasmota.add_driver(lp_uart_sml.lp_uart_sml)
-
-  def set_print_variable(cmd, idx, payload, payload_json)
-    import string
-    var result
-    if payload != ""
-      result = lp_uart_sml.lp_uart_sml.set_print_variable(int(payload))
-    end
-    tasmota.resp_cmnd(string.format('{"print variable":%i}', result))
-  end
-  tasmota.add_cmd('set_print_variable', set_print_variable)
 
   def get_obis_value(cmd, idx, payload, payload_json)
     import json

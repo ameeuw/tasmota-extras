@@ -9,9 +9,6 @@
 #include "ulp_lp_core_uart.h"
 #include "sml.h"
 
-uint32_t iteration = 0;
-volatile uint32_t print_variable = 1337;
-
 uint32_t sml_unexpected_count = 0;
 
 typedef struct
@@ -38,8 +35,6 @@ int main(void)
     uint8_t data[256] = {0};
     int length = 0;
 
-    iteration++;
-    (void)print_variable;
     (void)obis_configs[0].unit;
     (void)obis_values[0];
     /* Read data from the LP_UART */
