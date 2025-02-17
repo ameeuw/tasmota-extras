@@ -242,30 +242,221 @@ class BerryGenerator {
   }
 
   async generateFile(
-    ulpData,
+    payload,
     template = this.getDefaultTemplate(),
     verbose = false
   ) {
-    const berryContent = await this.generateContent(ulpData, template);
-
-    console.log("\nGenerated berry file.");
-    console.log(
-      "To make sure to copy the entire file, run the script with the -v flag.\n"
-    );
+    const liquidTemplate = this.engine.parse(template);
+    const berryContent = this.engine.render(liquidTemplate, payload);
 
     if (verbose) {
       console.log(berryContent);
-    } else {
-      this.printTruncated(berryContent);
     }
 
     return berryContent;
   }
+}
 
-  async generateContent(ulpData, template) {
+class TAppBuilder {
+  constructor(projectName) {
+    this.projectName = projectName;
+    this.engine = new Liquid();
+  }
+
+  async build(directoryPath, payload) {
+    const buildPath = path.join(directoryPath, "build", "berry");
+
+    try {
+      // Read relevant Berry files (starting with the project name)
+
+      const files = fs.readdirSync(buildPath);
+      const berryFiles = files.filter(
+        (file) =>
+          (file.startsWith(this.projectName) && file.endsWith(".be")) ||
+          file.includes("ulp2berry")
+      );
+
+      console.log(
+        `Found ${berryFiles.length} relevant Berry files: "${berryFiles.join(
+          '", "'
+        )}"`
+      );
+
+      const berryFileContents = berryFiles.map((file) => {
+        return {
+          name: file,
+          content: fs.readFileSync(path.join(buildPath, file), "utf8"),
+        };
+      });
+
+      // const tappTemplates = fs.readdirSync(path.join(__dirname, "templates"));
+      // const tappTemplateFiles = tappTemplates.filter((file) =>
+      //   file.includes("tapp")
+      // );
+
+      // tappTemplateFiles.forEach((file) => {
+      //   berryFileContents.push({
+      //     name: file,
+      //     content: fs.readFileSync(
+      //       path.join(__dirname, "templates", file),
+      //       "utf8"
+      //     ),
+      //   });
+      // });
+
+      // Get default autoexec file if not present
+      if (!berryFileContents.find((file) => file.name.includes("autoexec"))) {
+        berryFileContents.push({
+          name: "autoexec.be",
+          content: this.getDefaultAutoexec(),
+        });
+      }
+
+      // Create TAPP structure
+      const tappPath = path.join(buildPath, `${this.projectName}-tapp`);
+      if (fs.existsSync(tappPath)) {
+        fs.rmSync(tappPath, { recursive: true });
+      }
+
+      // Create directory and write files
+      fs.mkdirSync(tappPath);
+
+      for (const file of berryFileContents) {
+        console.log(file.name);
+        if (file.name.includes("autoexec")) {
+          file.name = "autoexec.be";
+        }
+        const liquidTemplate = this.engine.parse(file.content);
+        const berryContent = await this.engine.render(liquidTemplate, payload);
+        fs.writeFileSync(path.join(tappPath, file.name), berryContent);
+      }
+
+      // Create ZIP archive
+      const tappFile = path.join(
+        buildPath,
+        `${this.projectName}-${payload.buildTarget}-${payload.ulpArch}.tapp`
+      );
+      execSync(`zip -0 -j "${tappFile}" "${tappPath}"/*`);
+    } catch (error) {
+      throw new Error(
+        `Error building TAPP: ${error.message}\n` +
+          `To build a Tasmota App for a ULP module there needs to be a build folder with ${this.projectName}.be`
+      );
+    }
+  }
+
+  getDefaultAutoexec(buildTarget, ulpArch) {
+    return `print("target: {{buildTarget}}")
+print("ULP architecture: {{ulpArch}}")
+var app
+var wd = tasmota.wd
+import sys
+if size(wd) sys.path().push(wd) end
+print("{{projectName}}/autoexec.be")
+print(wd)
+import ${this.projectName}
+if size(wd) sys.path().pop() end`;
+  }
+}
+
+class App {
+  constructor() {
+    this.args = new Args();
+    this.args.validateInput();
+
+    const directoryPath = this.args.getDirectory();
+    this.projectName = process.env.PROJECT_NAME || path.basename(directoryPath);
+
+    this.processor = new ULPProcessor(directoryPath);
+    this.generator = new BerryGenerator(this.projectName);
+    this.tappBuilder = new TAppBuilder(this.projectName);
+  }
+
+  async run() {
+    try {
+      const ulpData = this.processor.process();
+      const payload = this.buildPayload(ulpData);
+
+      if (this.args.has("-t")) {
+        await this.tappBuilder.build(this.args.getDirectory(), payload);
+      } else {
+        const templates = this.args.has("-r")
+          ? this.readBerryTemplates(this.args.getDirectory())
+          : [this.generator.getDefaultTemplate()];
+
+        const buildPath = path.join(this.args.getDirectory(), "build", "berry");
+        if (this.args.has("-w")) {
+          if (fs.existsSync(buildPath)) {
+            fs.rmSync(buildPath, { recursive: true });
+          }
+          // Create directory and write files
+          fs.mkdirSync(buildPath);
+        }
+
+        for (const template of templates) {
+          const berryContent = await this.generator.generateFile(
+            payload,
+            template.content,
+            this.args.has("-v")
+          );
+
+          if (this.args.has("-w")) {
+            this.writeBerryFile(berryContent, buildPath, template.name);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error:", error.message);
+      process.exit(1);
+    }
+  }
+
+  readBerryTemplates(directoryPath) {
+    const files = fs.readdirSync(directoryPath);
+    const berryFiles = files.filter((file) => file.endsWith(".be"));
+
+    const ulp2berryTemplates = fs.readdirSync(
+      path.join(__dirname, "templates")
+    );
+    const templateFiles = ulp2berryTemplates.filter((file) =>
+      file.includes("ulp2berry")
+    );
+
+    const berryTemplates = [];
+    templateFiles.forEach((file) => {
+      const content = fs.readFileSync(
+        path.join(__dirname, "templates", file),
+        "utf8"
+      );
+      berryTemplates.push({
+        name: file,
+        content,
+      });
+    });
+
+    berryFiles.forEach((file) => {
+      const content = fs.readFileSync(path.join(directoryPath, file), "utf8");
+      berryTemplates.push({
+        name: file,
+        content,
+      });
+    });
+
+    console.log(berryTemplates.map((t) => t.name).join("\n"));
+
+    return berryTemplates;
+  }
+
+  writeBerryFile(content, directoryPath, templateName) {
+    const filePath = path.join(directoryPath, templateName);
+    fs.writeFileSync(filePath, content);
+    console.log(`Berry file written to: ${filePath}`);
+  }
+
+  buildPayload(ulpData) {
     const { mapResult, binaryResult, mainHResult } = ulpData;
 
-    if (!mapResult || !binaryResult || !template) {
+    if (!mapResult || !binaryResult) {
       throw new Error("Missing required data for Berry file generation");
     }
 
@@ -292,7 +483,7 @@ class BerryGenerator {
       =================================`);
 
     // Transform the data into the required structure
-    const transformedData = {
+    return {
       binary: binaryResult,
       symbols: Object.entries(mapResult.symbols).reduce((acc, [key, value]) => {
         // Get the type and length from mainHResult if available
@@ -309,175 +500,6 @@ class BerryGenerator {
       ulpArch: mapResult.type,
       projectName: this.projectName,
     };
-
-    const liquidTemplate = this.engine.parse(template);
-    return this.engine.render(liquidTemplate, transformedData);
-  }
-
-  printTruncated(content) {
-    console.log(
-      "! ALL LINES ARE CURTAILED TO 120 CHARACTERS !\n" +
-        "!COPYING THIS CODE WILL MOST LIKELY NOT WORK!\n\n" +
-        content
-          .split("\n")
-          .map((line) => line.slice(0, 120))
-          .join("\n")
-    );
-  }
-}
-
-class TAppBuilder {
-  constructor(projectName) {
-    this.projectName = projectName;
-  }
-
-  build(directoryPath, ulpData) {
-    const buildPath = path.join(directoryPath, "build");
-    const { mapResult, buildTarget } = ulpData;
-
-    try {
-      // Read relevant Berry files (starting with the project name)
-
-      const files = fs.readdirSync(buildPath);
-      const berryFiles = files.filter(
-        (file) => file.startsWith(this.projectName) && file.endsWith(".be")
-      );
-
-      console.log(
-        `Found ${berryFiles.length} relevant Berry files: "${berryFiles.join(
-          '", "'
-        )}"`
-      );
-
-      const berryFileContents = berryFiles.map((file) => {
-        return {
-          name: file,
-          content: fs.readFileSync(path.join(buildPath, file), "utf8"),
-        };
-      });
-
-      // Get default autoexec file if not present
-      if (!berryFileContents.find((file) => file.name.includes("autoexec"))) {
-        berryFileContents.push({
-          name: "autoexec.be",
-          content: this.getDefaultAutoexec(buildTarget, mapResult.type),
-        });
-      }
-
-      // Create TAPP structure
-      const tappPath = path.join(buildPath, `${this.projectName}-tapp`);
-      if (fs.existsSync(tappPath)) {
-        fs.rmSync(tappPath, { recursive: true });
-      }
-
-      // Create directory and write files
-      fs.mkdirSync(tappPath);
-
-      berryFileContents.forEach((file) => {
-        if (file.name.includes("autoexec")) {
-          file.name = "autoexec.be";
-        }
-        fs.writeFileSync(path.join(tappPath, file.name), file.content);
-      });
-
-      // Create ZIP archive
-      const tappFile = path.join(
-        buildPath,
-        `${this.projectName}-${buildTarget}-${mapResult.type}.tapp`
-      );
-      execSync(`zip -0 -j "${tappFile}" "${tappPath}"/*`);
-    } catch (error) {
-      throw new Error(
-        `Error building TAPP: ${error.message}\n` +
-          `To build a Tasmota App for a ULP module there needs to be a build folder with ${this.projectName}.be`
-      );
-    }
-  }
-
-  getDefaultAutoexec(buildTarget, ulpArch) {
-    return `print("target: ${buildTarget}")
-print("ULP architecture: ${ulpArch}")
-var app
-var wd = tasmota.wd
-import sys
-if size(wd) sys.path().push(wd) end
-print("${this.projectName}/autoexec.be")
-print(wd)
-import ${this.projectName}
-if size(wd) sys.path().pop() end`;
-  }
-}
-
-class App {
-  constructor() {
-    this.args = new Args();
-    this.args.validateInput();
-
-    const directoryPath = this.args.getDirectory();
-    this.projectName = process.env.PROJECT_NAME || path.basename(directoryPath);
-
-    this.processor = new ULPProcessor(directoryPath);
-    this.generator = new BerryGenerator(this.projectName);
-    this.tappBuilder = new TAppBuilder(this.projectName);
-  }
-
-  async run() {
-    try {
-      const ulpData = this.processor.process();
-
-      if (this.args.has("-t")) {
-        this.tappBuilder.build(this.args.getDirectory(), ulpData);
-      } else {
-        const templates = this.args.has("-r")
-          ? this.readBerryTemplates(this.args.getDirectory())
-          : [this.generator.getDefaultTemplate()];
-
-        for (const template of templates) {
-          const berryContent = await this.generator.generateFile(
-            ulpData,
-            template.content,
-            this.args.has("-v")
-          );
-
-          if (this.args.has("-w")) {
-            this.writeBerryFile(
-              berryContent,
-              this.args.getDirectory(),
-              template.name
-            );
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error:", error.message);
-      process.exit(1);
-    }
-  }
-
-  readBerryTemplates(directoryPath) {
-    const files = fs.readdirSync(directoryPath);
-    const berryFiles = files.filter((file) => file.endsWith(".be"));
-
-    if (berryFiles.length > 0) {
-      return berryFiles.map((file) => {
-        const content = fs.readFileSync(path.join(directoryPath, file), "utf8");
-        return {
-          name: file,
-          content,
-        };
-      });
-    }
-
-    return null;
-  }
-
-  writeBerryFile(content, directoryPath, templateName) {
-    const buildPath = path.join(directoryPath, "build");
-    if (fs.existsSync(buildPath)) {
-      const filePath = path.join(buildPath, templateName);
-      fs.writeFileSync(filePath, content);
-      console.log(`Berry file written to: ${filePath}`);
-    }
   }
 }
 
