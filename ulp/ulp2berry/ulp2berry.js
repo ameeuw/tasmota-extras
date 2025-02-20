@@ -289,21 +289,6 @@ class TAppBuilder {
         };
       });
 
-      // const tappTemplates = fs.readdirSync(path.join(__dirname, "templates"));
-      // const tappTemplateFiles = tappTemplates.filter((file) =>
-      //   file.includes("tapp")
-      // );
-
-      // tappTemplateFiles.forEach((file) => {
-      //   berryFileContents.push({
-      //     name: file,
-      //     content: fs.readFileSync(
-      //       path.join(__dirname, "templates", file),
-      //       "utf8"
-      //     ),
-      //   });
-      // });
-
       // Get default autoexec file if not present
       if (!berryFileContents.find((file) => file.name.includes("autoexec"))) {
         berryFileContents.push({
@@ -345,7 +330,7 @@ class TAppBuilder {
     }
   }
 
-  getDefaultAutoexec(buildTarget, ulpArch) {
+  getDefaultAutoexec() {
     return `print("target: {{buildTarget}}")
 print("ULP architecture: {{ulpArch}}")
 var app
@@ -354,7 +339,7 @@ import sys
 if size(wd) sys.path().push(wd) end
 print("{{projectName}}/autoexec.be")
 print(wd)
-import ${this.projectName}
+import {{projectName}}
 if size(wd) sys.path().pop() end`;
   }
 }
